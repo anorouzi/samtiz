@@ -1,4 +1,4 @@
-/* Pardeh (پرده) — Aparat, live TV, links and USB videos for Samsung Tizen TVs.
+/* Pardeh (پرده) — Aparat, Gapfilm, live TV, links and USB videos for Samsung Tizen TVs.
  * Written in ES5 because the 2016 (Tizen 2.4) web engine has no ES6 support. */
 (function () {
     'use strict';
@@ -11,8 +11,10 @@
         { id: 'PLAYER_DISPLAY_MODE_FULL_SCREEN', label: 'تمام صفحه (کشیده)' },
         { id: 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO', label: 'خودکار' }
     ];
-    var CHIPS = ['ورزشی', 'کارتون', 'فیلم', 'سریال', 'مستند', 'موسیقی', 'آشپزی', 'طنز', 'خبر'];
-    var TOP = ['search', 'btn-live', 'btn-link', 'btn-phone', 'btn-usb'];
+    var APARAT_CHIPS = ['ورزشی', 'کارتون', 'فیلم', 'سریال', 'مستند', 'موسیقی', 'آشپزی', 'طنز', 'خبر'];
+    var TOP = ['search', 'btn-live', 'btn-link', 'btn-phone', 'btn-usb'];   // the site tabs go in front at startup
+    var GAP = 'https://core.gapfilm.ir/api/';
+    var GAP_IMG = 'https://cdn.gapfilm.ir/image/400/panel/';
     var TW_CHANNELS = 'https://gateway.telewebion.net/kandoo/channel/getChannelsList/';
     var TW_LIVE = 'https://ncdn.telewebion.net/';
     var VIDEO_EXT = /\.(mp4|mkv|avi|mov|m4v|ts|webm|wmv|flv|3gp)$/i;
@@ -57,10 +59,14 @@
     function setTransform(el, t) { el.style.webkitTransform = t; el.style.transform = t; }
 
     // ---------- state ----------
-    var screen = 'browse';          // browse | link | phone | player
+    var screen = 'browse';          // browse | link | phone | login | player
     var zone = 'top';               // top | chips | grid
     var topIndex = 0, chipIndex = 0, gridIndex = 0;
-    var videos = [], nextUrl = null, loading = false, currentQuery = null;
+    var videos = [], more = null;                    // the list on screen; more() loads its next page
+    var site = null, chips = [], activeChip = -1;    // current site tab, its category chips, the chip shown
+    var listSeq = 0, listToken = 0, listParent = null;   // current list, and the list a series was opened from
+    var accounts = store.get('accounts', {});        // site logins: site id -> { token, phone }
+    var login = null;                                // the open login dialog
     var player = {
         qualities: [], qIndex: 0, title: '', id: null, live: false, listIndex: -1,
         paused: false, duration: 0, pos: 0, token: 0, osdTimer: null,
@@ -80,19 +86,26 @@
     var enterDown = false, enterDownTimer = null, enterHold = null;
 
     // ---------- helpers ----------
-    function getJSON(url, ok, fail) {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
+    // JSON over XHR. opts: { method, body (sent as JSON), headers }. ok(data, xhr); fail(message, status).
+    // Error replies that carry the site's own message ({ message } / { Message }) show that message.
+    function ajax(url, opts, ok, fail) {
+        var xhr = new XMLHttpRequest(), headers = opts.headers || {};
+        xhr.open(opts.method || 'GET', url, true);
         xhr.timeout = 20000;
+        if (opts.body !== undefined) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+        Object.keys(headers).forEach(function (k) { xhr.setRequestHeader(k, headers[k]); });
         xhr.onload = function () {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try { ok(JSON.parse(xhr.responseText)); } catch (e) { fail('خطا در خواندن پاسخ'); }
-            } else { fail('خطای سرور: ' + xhr.status); }
+            var data = null, good = xhr.status >= 200 && xhr.status < 300;
+            try { data = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
+            if (good && data !== null) { return ok(data, xhr); }
+            fail((data && (data.message || data.Message)) || (good ? 'خطا در خواندن پاسخ' : 'خطای سرور: ' + xhr.status), xhr.status);
         };
-        xhr.onerror = function () { fail('اتصال به اینترنت برقرار نشد'); };
-        xhr.ontimeout = function () { fail('زمان اتصال تمام شد'); };
-        xhr.send();
+        xhr.onerror = function () { fail('اتصال به اینترنت برقرار نشد', 0); };
+        xhr.ontimeout = function () { fail('زمان اتصال تمام شد', 0); };
+        xhr.send(opts.body !== undefined ? JSON.stringify(opts.body) : null);
     }
+
+    function getJSON(url, ok, fail) { ajax(url, {}, ok, fail); }
 
     // Sends diagnostics to the TV Hub (written to ~/TVHub/tv.log).
     function hubLog(event, data) {
@@ -125,14 +138,17 @@
     function setStatus(text) { $('status').textContent = text || ''; }
 
     function toast(text) {
+        hubLog('toast', text);
         $('toast').textContent = text;
         show('toast');
         clearTimeout(toastTimer);
         toastTimer = setTimeout(function () { hide('toast'); }, 3500);
     }
 
+    // Empties the grid for a new list; replies still on their way for the old one are ignored.
     function resetGrid() {
-        videos = []; gridIndex = 0; nextUrl = null;
+        videos = []; gridIndex = 0; more = null;
+        listToken = ++listSeq; listParent = null;
         if (focusedEl && focusedEl.className.indexOf('card') !== -1) { focusedEl = null; }
         $('grid').innerHTML = '<div id="grid-inner"></div>';
     }
@@ -145,46 +161,91 @@
 
     // The chip of the category currently shown gets its own mark, separate from the focus.
     function markActiveChip() {
-        for (var i = 0; i < CHIPS.length; i++) {
+        for (var i = 0; i < chips.length; i++) {
             var c = $('chip-' + i);
             if (!c) { continue; }
-            if (CHIPS[i] === currentQuery) { c.classList.add('active'); } else { c.classList.remove('active'); }
+            if (i === activeChip) { c.classList.add('active'); } else { c.classList.remove('active'); }
         }
     }
 
-    // ---------- Aparat ----------
-    function search(query) {
-        currentQuery = query;
-        markActiveChip();
-        resetGrid();
-        setStatus('در حال جستجو: ' + query + ' ...');
-        hubLog('search', query);
-        loadPage(API + 'search/text/' + encodeURIComponent(query), query);
+    // ---------- lists (any site) ----------
+    // Items: { title, poster, badge, meta } plus what the site needs to open them.
+    function addItems(items) {
+        var html = '';
+        items.forEach(function (v) {
+            var idx = videos.length;
+            videos.push(v);
+            html += cardHtml(idx, '<div class="thumb" id="thumb-' + idx + '">' +
+                (v.badge ? '<span class="dur">' + esc(v.badge) + '</span>' : '') + '</div>', v.title, esc(v.meta) || '&nbsp;');
+        });
+        if ($('grid-inner')) { $('grid-inner').insertAdjacentHTML('beforeend', html); }
     }
 
-    // query is given for a new search; next pages pass nothing and belong to the current one.
-    function loadPage(url, query) {
-        if (loading && !query) { return; }
-        var forQuery = query || currentQuery;
-        loading = true;
-        getJSON(url, function (data) {
-            if (forQuery !== currentQuery) { return; }   // the user switched category meanwhile
-            loading = false;
-            var row = data.data && data.data[0] && data.data[0].attributes;
-            nextUrl = row && row.link && row.link.next ? row.link.next : null;
-            var html = '';
-            (data.included || []).forEach(function (i) {
-                if (i.type !== 'Video') { return; }
-                var v = i.attributes, idx = videos.length;
-                videos.push({ uid: v.uid, title: v.title, poster: (v.small_poster || v.medium_poster || '').replace(/'/g, '%27') });
-                html += cardHtml(idx,
-                    '<div class="thumb" id="thumb-' + idx + '"><span class="dur">' + fmtTime(+v.duration || 0) + '</span></div>',
-                    v.title, esc(v.sender_name || v.username) + ' · ' + esc(v.visit_cnt) + ' بازدید');
+    // Shows a paged list: fetch(page, ok(items, hasMore), fail) is called for page 1, 2, …
+    // opts: { unit, parent } — parent is the list a series was opened from (Back returns to it).
+    function showList(label, fetch, opts) {
+        opts = opts || {};
+        markActiveChip();
+        resetGrid();
+        listParent = opts.parent || null;
+        var token = listToken, page = 1, busy = false;
+        setStatus('در حال بارگذاری «' + label + '» ...');
+        var next = function () {
+            if (busy) { return; }
+            busy = true;
+            fetch(page, function (items, hasMore) {
+                busy = false;
+                if (token !== listToken) { return; }   // the user moved on to another list
+                hubLog('list', { site: site.id, label: label, page: page, items: items.length });
+                page++;
+                more = hasMore ? next : null;
+                addItems(items);
+                setStatus(videos.length ? '«' + label + '» · ' + videos.length + ' ' + (opts.unit || 'مورد') +
+                    (listParent ? ' · Back: برگشت' : '') : 'نتیجه‌ای پیدا نشد');
+                render();
+            }, function (err) {
+                busy = false;
+                hubLog('list.fail', { site: site.id, label: label, page: page, err: err });
+                if (token === listToken) { setStatus(err); }
             });
-            if ($('grid-inner')) { $('grid-inner').insertAdjacentHTML('beforeend', html); }
-            setStatus(videos.length ? '«' + currentQuery + '» · ' + videos.length + ' ویدیو' : 'نتیجه‌ای پیدا نشد');
-            render();
-        }, function (err) { if (forQuery === currentQuery) { loading = false; setStatus(err); } });
+        };
+        next();
+    }
+
+    // A series list remembers the list it was opened from, so Back can bring it back as it was.
+    function saveList() {
+        return { videos: videos, more: more, token: listToken, gridIndex: gridIndex, chip: activeChip,
+            html: $('grid-inner') ? $('grid-inner').innerHTML.replace(/ focused/g, '') : '', status: $('status').textContent };
+    }
+
+    function backToParent() {
+        var p = listParent;
+        resetGrid();
+        videos = p.videos; more = p.more; listToken = p.token; gridIndex = p.gridIndex; activeChip = p.chip;
+        $('grid-inner').innerHTML = p.html;
+        markActiveChip();
+        setStatus(p.status);
+        zone = 'grid';
+        render();
+    }
+
+    // ---------- Aparat ----------
+    function searchAparat(query) {
+        hubLog('search', query);
+        var url = API + 'search/text/' + encodeURIComponent(query);
+        showList(query, function (page, ok, fail) {
+            getJSON(url, function (data) {
+                var row = data.data && data.data[0] && data.data[0].attributes, items = [];
+                url = row && row.link && row.link.next ? row.link.next : null;
+                (data.included || []).forEach(function (i) {
+                    if (i.type !== 'Video') { return; }
+                    var v = i.attributes;
+                    items.push({ uid: v.uid, title: v.title, poster: v.small_poster || v.medium_poster || '',
+                        badge: fmtTime(+v.duration || 0), meta: (v.sender_name || v.username || '') + ' · ' + (v.visit_cnt || 0) + ' بازدید' });
+                });
+                ok(items, !!url);
+            }, fail);
+        }, { unit: 'ویدیو' });
     }
 
     // Playback info is cached for a few minutes (the links carry expiring tokens).
@@ -238,14 +299,41 @@
     }
 
     // Plays item i of the current list; CH ▲/▼ in the player walk through the same list.
+    // A series opens the list of its episodes instead.
     function playItem(i) {
         var v = videos[i];
         if (!v) { return; }
         gridIndex = i;
+        if (v.series) {
+            if (screen === 'player') { closePlayer(); }
+            return siteById(v.site).open(v);
+        }
         player.listIndex = i;
         if (v.live) { return playLive(v); }
         if (v.local) { return playLocal(v); }
+        if (v.site) { return siteById(v.site).open(v); }
         playAparat(v.uid, v.title);
+    }
+
+    // Reads an HLS master playlist, so ▲ can switch between its quality variants.
+    function loadVariants(master, done) {
+        var auto = { label: 'خودکار', url: master, stream: true };
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', master, true);
+        xhr.timeout = 15000;
+        xhr.onload = function () {
+            var list = [auto], lines = (xhr.responseText || '').split('\n');
+            for (var i = 0; i < lines.length - 1; i++) {
+                var m = lines[i].match(/^#EXT-X-STREAM-INF:.*RESOLUTION=\d+x(\d+)/), next = lines[i + 1].trim();
+                if (m && next && next.charAt(0) !== '#') {
+                    // Telewebion names its 50 fps variants …108050p….
+                    list.push({ label: m[1] + 'p' + (/108050p/.test(next) ? ' 50fps' : ''), url: resolveUrl(master, next), stream: true });
+                }
+            }
+            done(list);
+        };
+        xhr.onerror = xhr.ontimeout = function () { done([auto]); };
+        xhr.send();
     }
 
     // ---------- Live TV (Telewebion) ----------
@@ -270,11 +358,13 @@
     }
 
     function showLive() {
-        currentQuery = null; markActiveChip();
+        activeChip = -1; markActiveChip();
         resetGrid();
         if (!HUB) { return setStatus('پخش زنده به «TV Hub» نیاز دارد (روی مک یا گوشی اندروید) — هاب پیدا نشد'); }
         setStatus('در حال دریافت شبکه‌ها ...');
+        var token = listToken;
         getJSON(hubProxy(TW_CHANNELS), function (data) {
+            if (token !== listToken) { return; }
             var list = (data.body && data.body.queryChannel) || [], html = '';
             list.forEach(function (c) {
                 var idx = videos.length;
@@ -289,26 +379,321 @@
         }, setStatus);
     }
 
-    // Lists the stream's quality variants so ▲ can switch between them.
     function playLive(v) {
         showPlayer(v.title);
-        var token = player.token, master = hubProxy(TW_LIVE + v.descriptor + '/live/playlist.m3u8');
-        var start = function (list) { if (token === player.token) { startPlayback(v.title, list, 0, { id: null, live: true }); } };
+        var token = player.token;
+        loadVariants(hubProxy(TW_LIVE + v.descriptor + '/live/playlist.m3u8'), function (list) {
+            if (token === player.token) { startPlayback(v.title, list, 0, { id: null, live: true }); }
+        });
+    }
+
+    // ---------- sites ----------
+    // Each site tab has its own categories (chips: fixed, or loaded from the site), search and way
+    // of opening an item. Sites that need an account get a login chip (phone number + SMS code).
+    // Only sites that work on the TV by itself belong here: Tamashakhoneh and Movieland were left
+    // out because this TV can't reach them without the hub (docs/REPORT.md, section 10).
+    var SITES = [
+        { id: 'aparat', name: 'آپارات', search: searchAparat,
+            chips: APARAT_CHIPS.map(function (c) { return { label: c, open: function () { searchAparat(c); } }; }) },
+        { id: 'gapfilm', name: 'گپ فیلم', loadChips: gapChips, search: gapSearch, open: gapOpen,
+            login: { request: gapLoginRequest, confirm: gapLoginConfirm } }
+    ];
+
+    function siteById(id) {
+        for (var i = 0; i < SITES.length; i++) { if (SITES[i].id === id) { return SITES[i]; } }
+        return SITES[0];
+    }
+
+    // As many categories as fit on one line (nine at most, for the number keys), then the account chip.
+    function renderChips() {
+        var s = site, acc = accounts[s.id], row = $('chips'), n = Math.min((s.chips || []).length, 9), last;
+        do {
+            chips = (s.chips || []).slice(0, n);
+            if (s.login) {
+                chips.push(acc ? { label: 'حساب ' + acc.phone, action: function () { accountMenu(s); } }
+                    : { label: 'ورود با موبایل', action: function () { openLogin(s); } });
+            }
+            row.innerHTML = chips.map(function (c, i) {
+                return '<div class="chip' + (c.action ? ' account' : '') + '" id="chip-' + i + '">' +
+                    (c.action ? '' : '<span class="num">' + (i + 1) + '</span>') + esc(c.label) + '</div>';
+            }).join('');
+            last = $('chip-' + (chips.length - 1));
+        } while (last && last.getBoundingClientRect().left < row.getBoundingClientRect().left && --n > 0);   // laid out right-to-left
+        if (focusedEl && focusedEl.className.indexOf('chip') !== -1) { focusedEl = null; }
+        markActiveChip();
+    }
+
+    function switchSite(i) {
+        var s = site = SITES[i];
+        store.set('site', s.id);
+        hubLog('site', s.id);
+        SITES.forEach(function (x, j) {
+            if (j === i) { $('site-' + j).classList.add('active'); } else { $('site-' + j).classList.remove('active'); }
+        });
+        $('search').placeholder = 'جستجو در ' + s.name + '...';
+        $('search').value = '';
+        activeChip = -1; chipIndex = 0;
+        resetGrid();
+        renderChips();
+        if (s.chips) { return openFirstChip(); }
+        setStatus('در حال بارگذاری ' + s.name + ' ...');
+        s.loadChips(function (list) {
+            s.chips = list;
+            hubLog('site.chips', { site: s.id, chips: list.map(function (c) { return c.label; }) });
+            if (site !== s) { return; }
+            renderChips();
+            openFirstChip();
+        }, function (err) {
+            hubLog('site.fail', { site: s.id, err: err });
+            if (site === s) { setStatus(err + ' — برای تلاش دوباره، تب ' + s.name + ' را دوباره بزنید'); }
+        });
+    }
+
+    function openFirstChip() {
+        if (chips.length && !chips[0].action) { openChip(0); } else { setStatus(''); }
+    }
+
+    // Category chips load their list; the account chip only acts on OK.
+    function openChip(i) {
+        var c = chips[i];
+        if (!c) { return; }
+        clearTimeout(chipTimer);
+        chipIndex = i;
+        if (c.action) { return c.action(); }
+        activeChip = i;
+        c.open();
+    }
+
+    function search(query) {
+        activeChip = -1;
+        site.search(query);
+    }
+
+    // ---------- Gapfilm (gapfilm.ir) ----------
+    // Free titles play without an account; the rest need a logged-in subscriber. Plain HLS and MP4
+    // on Certum certificates, which this TV trusts, so no hub is needed.
+    function gapCall(path, body, ok, fail, extraHeaders) {
+        var acc = accounts.gapfilm, h = extraHeaders || {};
+        h.SourceChannel = 'GF_WEBSITE';
+        if (acc) { h.Authorization = 'bearer ' + acc.token; h.SourceChannelUser = 'GF_WEBSITE'; }
+        ajax(GAP + path, { method: body ? 'POST' : 'GET', body: body || undefined, headers: h }, ok, function (err, status) {
+            if (status === 401 && acc) { loginExpired('gapfilm'); }
+            fail(err, status);
+        });
+    }
+
+    function gapItem(c) {
+        var id = c.ContentId || c.ContentID, genre = '';
+        (c.Properties || []).forEach(function (p) { if (p.Name === 'ژانر') { genre = p.Value; } });
+        return { site: 'gapfilm', id: id, title: c.Title, poster: GAP_IMG + id + '/landscape.jpg', meta: genre || c.EnglishTitle || '' };
+    }
+
+    function gapItems(list) {
+        return (list || []).filter(function (c) { return c.ContentId || c.ContentID; }).map(gapItem);
+    }
+
+    // The rows of Gapfilm's home page become the categories: plain rows (no template, 10, 11) and
+    // collections (1). Banners, actors (14), "continue watching" (15) and the like are skipped.
+    var GAP_ROWS = [null, undefined, 1, 10, 11];
+
+    function gapChips(ok, fail) {
+        gapCall('v3.3/GetFirstPageByPlatform?PlatformId=1&PlatformType=1&PageType=1&ParentType=2&ContentRows=1&PageSize=20&PageIndex=1', null, function (d) {
+            var list = [];
+            ((d.Result && d.Result.Sections) || []).forEach(function (s) {
+                if (GAP_ROWS.indexOf(s.SectionTemplateId) === -1 || s.Total < 2 || !s.Title) { return; }
+                list.push({ label: s.Title, open: function () { gapSection(s.SectionId, s.Title); } });
+            });
+            ok(list);
+        }, fail);
+    }
+
+    // Gapfilm counts pages from 0.
+    function gapSection(id, title) {
+        showList(title, function (page, ok, fail) {
+            gapCall('v3.3/GetFirstPageByPlatformPaging?EntityType=1&PageSize=24&EntityId=' + id + '&PageIndex=' + (page - 1), null, function (d) {
+                var r = d.Result || {};
+                ok(gapItems(r.Contents), page < (r.TotalPage || 0));
+            }, fail);
+        });
+    }
+
+    function gapSearch(query) {
+        showList(query, function (page, ok, fail) {
+            gapCall('v1.0/search?PageSize=24&Title=' + encodeURIComponent(query) + '&PageIndex=' + (page - 1), null, function (d) {
+                ok(gapItems(d.Contents), page < (d.TotalPage || 0));
+            }, fail);
+        });
+    }
+
+    // A film plays straight away; a series opens as a list of its episodes (one page per season).
+    function gapOpen(v) {
+        if (v.att) { return gapPlay(v); }
+        toast('در حال باز کردن «' + v.title + '» ...');
+        gapCall('v4/Content/GetContent?Id=' + v.id, null, function (d) {
+            var seasons = (d.Result && d.Result.SeasonList) || [];
+            if (!seasons.length) { return toast('ویدیویی برای «' + v.title + '» پیدا نشد'); }
+            var film = seasons.length === 1 && seasons[0].NumberOfEpisodes <= 1;
+            var fetch = function (page, ok, fail) {
+                var s = seasons[page - 1];
+                gapCall('v4/Content/GetContentAttachments?generateLink=true&Id=' + v.id + '&seasonId=' + s.SeasonId, null, function (r) {
+                    var items = [];
+                    ((r.Result && r.Result.Attachments) || []).forEach(function (a) {
+                        items.push({ site: 'gapfilm', id: v.id, att: a, poster: a.Thumbnail || v.poster,
+                            title: film ? v.title : (seasons.length > 1 ? s.SeasonTitle + ' · ' : '') + a.Title,
+                            badge: a.DurationSeconds ? fmtTime(a.DurationSeconds) : '', meta: a.IsFree ? 'رایگان' : 'ویژهٔ مشترکین' });
+                    });
+                    ok(items, page < seasons.length);
+                }, fail);
+            };
+            if (film) {
+                return fetch(1, function (items) { if (items.length) { gapPlay(items[0]); } else { toast('لینک پخش پیدا نشد'); } }, toast);
+            }
+            if (screen === 'player') { closePlayer(); }
+            showList(v.title, fetch, { unit: 'قسمت', parent: saveList() });
+            zone = 'grid';
+        }, toast);
+    }
+
+    function gapPlay(v) {
+        var a = v.att, list = [], hls = null;
+        if (!a.IsFree && !accounts.gapfilm) {
+            toast('این ویدیو ویژهٔ مشترکین گپ فیلم است — اول وارد حساب شوید');
+            return openLogin(siteById('gapfilm'), function () { gapRelink(v); });
+        }
+        a.Files.forEach(function (f) {
+            if (f.Type === 7 && !hls) { hls = f.Path; }   // adaptive stream
+            else if (f.Type === 9 && f.Width) { list.push({ label: Math.round(f.Width * 9 / 16) + 'p', url: f.Path }); }   // MP4s
+        });
+        if (hls) { list.push({ label: 'خودکار', url: hls, stream: true }); }
+        if (!list.length) { return toast('لینک پخش پیدا نشد'); }
+        showPlayer(v.title);
+        var token = player.token;
+        var start = function () {
+            if (token === player.token) { startPlayback(v.title, list, pickQuality(list), { id: 'g:' + v.id + ':' + a.SeasonId + ':' + a.EpisodeNo }); }
+        };
+        if (a.IsFree || !hls) { return start(); }
+        // Without a subscription the stream answers 402.
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', master, true);
+        xhr.open('GET', hls, true);
         xhr.timeout = 15000;
         xhr.onload = function () {
-            var list = [{ label: 'خودکار', url: master, stream: true }], lines = (xhr.responseText || '').split('\n');
-            for (var i = 0; i < lines.length - 1; i++) {
-                var m = lines[i].match(/^#EXT-X-STREAM-INF:.*RESOLUTION=\d+x(\d+)/);
-                if (m && lines[i + 1].indexOf('http') === 0) {
-                    list.push({ label: m[1] + 'p' + (/108050p/.test(lines[i + 1]) ? ' 50fps' : ''), url: lines[i + 1].trim(), stream: true });
-                }
-            }
-            start(list);
+            if (token !== player.token) { return; }
+            if (xhr.status === 402) { return playerError('این ویدیو اشتراک گپ فیلم لازم دارد'); }
+            start();
         };
-        xhr.onerror = xhr.ontimeout = function () { start([{ label: 'خودکار', url: master, stream: true }]); };
+        xhr.onerror = xhr.ontimeout = start;
         xhr.send();
+    }
+
+    // Links made before logging in are a guest's; fetch them again for the account.
+    function gapRelink(v) {
+        gapCall('v4/Content/GetContentAttachments?generateLink=true&Id=' + v.id + '&seasonId=' + v.att.SeasonId, null, function (d) {
+            var a = null;
+            ((d.Result && d.Result.Attachments) || []).forEach(function (x) { if (x.EpisodeNo === v.att.EpisodeNo) { a = x; } });
+            if (!a) { return toast('لینک پخش پیدا نشد'); }
+            v.att = a;
+            gapPlay(v);
+        }, toast);
+    }
+
+    function gapDevice() {
+        var id = store.get('deviceId', null);
+        if (!id) { id = 'tv-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); store.set('deviceId', id); }
+        return { OS: 'Tizen', OsVersion: '2.4', DeviceModel: 'Samsung TV', AndroidId: id, AdvertiseId: id };
+    }
+
+    function gapLoginRequest(phone, ok, fail) {
+        gapCall('v3.2/Account/Login', { Method: 1, PhoneNo: phone }, function (d) {
+            if (d.Code === 1) { ok(); } else { fail(d.Message || 'ارسال کد ممکن نشد'); }
+        }, fail, gapDevice());
+    }
+
+    function gapLoginConfirm(phone, code, ok, fail) {
+        gapCall('v3.2/Account/Confirm', { Type: 3, Code: code, PhoneNo: phone }, function (d) {
+            if (d.Code === 1 && d.Data && d.Data.Token) { ok({ token: d.Data.Token, phone: phone }); } else { fail(d.Message || 'کد درست نیست'); }
+        }, fail, gapDevice());
+    }
+
+    // ---------- site login: phone number, then the SMS code, typed with the remote ----------
+    // then() runs after a successful login (e.g. plays the video that needed it).
+    function openLogin(s, then) {
+        if (screen === 'player') { closePlayer(); }
+        login = { site: s, then: then || null, phone: '', step: 'phone', busy: false };
+        screen = 'login';
+        $('login-title').textContent = 'ورود به ' + s.name;
+        show('login-dialog');
+        loginStep('phone');
+    }
+
+    var LOGIN_HINTS = {
+        phone: 'شمارهٔ موبایلِ حسابتان را وارد کنید (مثل 09121234567) و OK بزنید؛ یک کد پیامکی برایتان فرستاده می‌شود.',
+        code: 'کدی را که به {phone} پیامک شد وارد کنید و OK بزنید.'
+    };
+
+    function loginStep(step, note) {
+        var input = $('login-input');
+        login.step = step;
+        login.busy = false;
+        input.value = '';
+        $('login-hint').textContent = (note ? note + ' — ' : '') + LOGIN_HINTS[step].replace('{phone}', login.phone);
+        input.focus();
+    }
+
+    function latinDigits(t) {
+        return t.replace(/[۰-۹٠-٩]/g, function (c) {
+            var n = c.charCodeAt(0);
+            return String(n - (n >= 0x6f0 ? 0x6f0 : 0x660));
+        });
+    }
+
+    function submitLogin() {
+        var l = login, s = l.site, value = latinDigits($('login-input').value).trim();
+        if (!value || l.busy) { return; }
+        $('login-input').blur();
+        l.busy = true;
+        $('login-hint').textContent = 'لطفاً صبر کنید...';
+        if (l.step === 'phone') {
+            var phone = value.replace(/[^\d]/g, '').replace(/^(98|0098)(?=9\d{9}$)/, '').replace(/^(?=9\d{9}$)/, '0');
+            if (!/^09\d{9}$/.test(phone)) { return loginStep('phone', 'شماره درست نیست'); }
+            l.phone = phone;
+            return s.login.request(phone, function () { if (login === l) { loginStep('code'); } },
+                function (err) { if (login === l) { loginStep('phone', err); } });
+        }
+        s.login.confirm(l.phone, value, function (acc) {
+            if (login !== l) { return; }
+            accounts[s.id] = acc;
+            store.set('accounts', accounts);
+            closeLogin();
+            if (site === s) { renderChips(); render(); }
+            toast('وارد حساب ' + s.name + ' شدید');
+            if (l.then) { l.then(); }
+        }, function (err) { if (login === l) { loginStep('code', err || 'کد درست نیست'); } });
+    }
+
+    function closeLogin() {
+        $('login-input').blur();
+        hide('login-dialog');
+        login = null;
+        screen = 'browse';
+        render();
+    }
+
+    function accountMenu(s) {
+        openMenu([
+            { label: 'خروج از حساب', action: function () { forgetLogin(s.id); toast('از حساب ' + s.name + ' خارج شدید'); } },
+            { label: 'بستن', action: noop }
+        ], 1, s.name + ' · ' + accounts[s.id].phone);
+    }
+
+    function forgetLogin(id) {
+        delete accounts[id];
+        store.set('accounts', accounts);
+        if (site && site.id === id) { renderChips(); render(); }
+    }
+
+    function loginExpired(id) {
+        forgetLogin(id);
+        toast('ورود به ' + siteById(id).name + ' منقضی شد — دوباره وارد شوید');
     }
 
     // ---------- USB ----------
@@ -352,7 +737,7 @@
     }
 
     function showUsb() {
-        currentQuery = null; markActiveChip();
+        activeChip = -1; markActiveChip();
         resetGrid();
         setStatus('در حال خواندن USB ...');
         findUsb(function () {
@@ -979,6 +1364,7 @@
             if (msg.type === 'play' && msg.url) {
                 if (screen === 'link') { closeLinkDialog(); }
                 if (screen === 'phone') { closePhoneDialog(); }
+                if (screen === 'login') { closeLogin(); }
                 toast('لینک از گوشی دریافت شد');
                 openLink(msg.url, msg.title);
             }
@@ -1053,6 +1439,7 @@
     }
 
     function playerError(msg) {
+        hubLog('player.error', msg);
         $('spinner-text').textContent = msg + ' — Back برای بازگشت';
         show('spinner');
         $('spinner').classList.add('error');
@@ -1132,7 +1519,8 @@
                 oncurrentplaytime: updateTime,
                 onstreamcompleted: function () {
                     if (player.id) { delete positions[player.id]; store.set('positions', positions); }
-                    if (player.listIndex >= 0 && player.listIndex < videos.length - 1 && !player.live) { return playNeighbor(1); }
+                    var nextItem = player.listIndex >= 0 && !player.live && videos[player.listIndex + 1];
+                    if (nextItem && !nextItem.series) { return playNeighbor(1); }
                     closePlayer();
                 },
                 onerror: function (e) { failed('خطای پخش: ' + e); }
@@ -1249,7 +1637,7 @@
         if (player.listIndex < 0 || i < 0 || i >= videos.length) {
             return toast(delta > 0 ? 'مورد بعدی وجود ندارد' : 'مورد قبلی وجود ندارد');
         }
-        if (nextUrl && i >= videos.length - COLS * 2) { loadPage(nextUrl); }
+        if (more && i >= videos.length - COLS * 2) { more(); }
         toast((delta > 0 ? 'بعدی: ' : 'قبلی: ') + videos[i].title);
         playItem(i);
     }
@@ -1376,7 +1764,7 @@
             var v = videos[i];
             if (v.poster && !v.thumbDone) {
                 var th = $('thumb-' + i);
-                if (th) { th.style.backgroundImage = "url('" + v.poster + "')"; v.thumbDone = true; }
+                if (th) { th.style.backgroundImage = "url('" + v.poster.replace(/'/g, '%27') + "')"; v.thumbDone = true; }
             }
         }
     }
@@ -1398,30 +1786,32 @@
         if (n >= videos.length) { n = videos.length - 1; }
         gridIndex = n;
         // Near the end: fetch the next page.
-        if (nextUrl && gridIndex >= videos.length - COLS * 2) { loadPage(nextUrl); }
+        if (more && gridIndex >= videos.length - COLS * 2) { more(); }
         render();
     }
 
-    // Moving across the categories loads the one you stop on.
+    // Moving across the categories loads the one you stop on (the account chip waits for OK).
     function focusChip(i) {
         chipIndex = i;
         clearTimeout(chipTimer);
         chipTimer = setTimeout(function () {
-            if (zone === 'chips' && screen === 'browse' && CHIPS[chipIndex] !== currentQuery) { search(CHIPS[chipIndex]); }
+            var c = chips[chipIndex];
+            if (zone === 'chips' && screen === 'browse' && c && !c.action && chipIndex !== activeChip) { openChip(chipIndex); }
         }, 700);
     }
 
     function openSearch() {
         if (screen === 'player') { closePlayer(); }
         if (screen !== 'browse') { return; }
-        zone = 'top'; topIndex = 0;
+        zone = 'top'; topIndex = TOP.indexOf('search');
         render();
         $('search').focus();
     }
 
     function onTopEnter() {
         var id = TOP[topIndex];
-        if (id === 'search') { $('search').focus(); }
+        if (id.indexOf('site-') === 0) { switchSite(+id.slice(5)); zone = 'chips'; render(); }
+        else if (id === 'search') { $('search').focus(); }
         else if (id === 'btn-live') { showLive(); }
         else if (id === 'btn-link') { openLinkDialog(); }
         else if (id === 'btn-phone') { openPhoneDialog(); }
@@ -1442,8 +1832,8 @@
         // Number keys pick a category (1–9) or open search (0).
         if (k >= 48 && k <= 57) {
             if (k === 48) { return openSearch(); }
-            chipIndex = Math.min(k - 49, CHIPS.length - 1);
-            search(CHIPS[chipIndex]); zone = 'chips';
+            var n = chips.filter(function (c) { return !c.action; }).length;
+            if (n) { openChip(Math.min(k - 49, n - 1)); zone = 'chips'; }
             return render();
         }
         if (k === KEY.CH_UP || k === KEY.CH_DOWN) {
@@ -1456,19 +1846,23 @@
             else if (k === KEY.RIGHT && topIndex < TOP.length - 1) { topIndex++; }
             else if (k === KEY.DOWN) {
                 zone = videos.length && (videos[0].local || videos[0].live) ? 'grid' : 'chips';
-                if (zone === 'chips') { chipIndex = Math.max(0, CHIPS.indexOf(currentQuery)); }
+                if (zone === 'chips') { chipIndex = Math.max(0, activeChip); }
             }
             else if (k === KEY.ENTER) { return onTopEnter(); }
         } else if (zone === 'chips') {
             // Chips are laid out right-to-left.
-            if (k === KEY.LEFT && chipIndex < CHIPS.length - 1) { focusChip(chipIndex + 1); }
+            if (k === KEY.LEFT && chipIndex < chips.length - 1) { focusChip(chipIndex + 1); }
             else if (k === KEY.RIGHT && chipIndex > 0) { focusChip(chipIndex - 1); }
             else if (k === KEY.UP) { zone = 'top'; }
             else if (k === KEY.DOWN && videos.length) {
-                if (CHIPS[chipIndex] !== currentQuery) { search(CHIPS[chipIndex]); }
+                if (chipIndex !== activeChip && chips[chipIndex] && !chips[chipIndex].action) { openChip(chipIndex); }
                 zone = 'grid'; gridIndex = Math.min(gridIndex, Math.max(0, videos.length - 1));
             }
-            else if (k === KEY.ENTER) { clearTimeout(chipTimer); search(CHIPS[chipIndex]); zone = 'grid'; gridIndex = 0; }
+            else if (k === KEY.ENTER && chips[chipIndex]) {
+                var act = chips[chipIndex].action;
+                openChip(chipIndex);
+                if (!act) { zone = 'grid'; gridIndex = 0; }
+            }
         } else if (zone === 'grid') {
             if (k === KEY.LEFT) { if ((gridIndex % COLS) < COLS - 1 && gridIndex < videos.length - 1) { moveGrid(1); } return; }
             if (k === KEY.RIGHT) { if (gridIndex % COLS) { moveGrid(-1); } return; }
@@ -1477,7 +1871,8 @@
             if (k === KEY.ENTER) { return onGridEnter(e); }
         }
         if (k === KEY.BACK) {
-            if (zone === 'grid') { zone = 'chips'; chipIndex = Math.max(0, CHIPS.indexOf(currentQuery)); }
+            if (zone === 'grid' && listParent) { return backToParent(); }   // from a series back to its list
+            if (zone === 'grid') { zone = 'chips'; chipIndex = Math.max(0, activeChip); }
             else if (zone === 'chips') { zone = 'top'; }
             else if (Date.now() - backAt < 2000) {
                 try { tizen.application.getCurrentApplication().exit(); } catch (err) { /* not on TV */ }
@@ -1554,18 +1949,27 @@
             } else if (k === KEY.IME_CANCEL || k === KEY.BACK) { closeLinkDialog(); }
             return;
         }
+        if (active === $('login-input')) {
+            if (k === KEY.ENTER || k === KEY.IME_DONE) { submitLogin(); }
+            else if (k === KEY.IME_CANCEL || k === KEY.BACK) { closeLogin(); }
+            return;
+        }
 
         e.preventDefault();
         if (helpOpen) { return toggleHelp(); }   // any button closes the help
         if (k === KEY.INFO) { return toggleHelp(); }
         if (screen === 'link') { if (k === KEY.BACK) { closeLinkDialog(); } return; }
+        if (screen === 'login') {
+            if (k === KEY.BACK) { closeLogin(); } else if (k === KEY.ENTER && !login.busy) { $('login-input').focus(); }
+            return;
+        }
         if (screen === 'phone') { if (k === KEY.BACK || k === KEY.ENTER) { closePhoneDialog(); } return; }
         if (menu) { return onMenuKey(k); }
 
         // Buttons that work the same everywhere (a running download/recording continues).
-        if (k === KEY.RED) { if (screen === 'player') { closePlayer(); } topIndex = 1; showLive(); return render(); }
+        if (k === KEY.RED) { if (screen === 'player') { closePlayer(); } topIndex = TOP.indexOf('btn-live'); showLive(); return render(); }
         if (k === KEY.GREEN || k === KEY.SEARCH) { return openSearch(); }
-        if (k === KEY.YELLOW) { if (screen === 'player') { closePlayer(); } topIndex = 4; showUsb(); return render(); }
+        if (k === KEY.YELLOW) { if (screen === 'player') { closePlayer(); } topIndex = TOP.indexOf('btn-usb'); showUsb(); return render(); }
         if (k === KEY.BLUE) { return openLinkDialog(); }
 
         if (screen === 'player') { onPlayerKey(k); } else if (k === KEY.RECORD) { toggleSave(); } else { onBrowseKey(k, e); }
@@ -1596,9 +2000,10 @@
 
     function init() {
         registerKeys();
-        $('chips').innerHTML = CHIPS.map(function (c, i) {
-            return '<div class="chip" id="chip-' + i + '"><span class="num">' + (i + 1) + '</span>' + c + '</div>';
-        }).join('');
+        $('search').insertAdjacentHTML('beforebegin', SITES.map(function (s, i) {
+            return '<div id="site-' + i + '" class="btn tab">' + s.name + '</div>';
+        }).join(''));
+        TOP = SITES.map(function (s, i) { return 'site-' + i; }).concat(TOP);
         document.addEventListener('keydown', onKey);
         document.addEventListener('keyup', onKeyUp);
         document.addEventListener('visibilitychange', function () {
@@ -1615,7 +2020,7 @@
             reattachDownloads();
         });
 
-        search(CHIPS[0]);
+        switchSite(SITES.indexOf(siteById(store.get('site', 'aparat'))));
         zone = 'chips';
         render();
     }

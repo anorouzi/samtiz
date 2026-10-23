@@ -163,6 +163,10 @@ engine doesn't support ES6. Persian UI, 1920×1080, remote-only navigation.
   infinite scrolling grid with posters, playback.
   - API: `https://www.aparat.com/api/fa/v1/video/video/search/text/<q>` and
     `.../show/videohash/<uid>`, which returns `file_link_all` (MP4 180p–1080p) and `hls_link`.
+- **Site tabs:** آپارات · گپ فیلم in the top bar. Each has its own categories, search and player.
+  A series opens as a list of its episodes, and Back returns to the list it came from. Gapfilm has a
+  «ورود با موبایل» chip: you type the phone number with the remote, then the SMS code. Only sites
+  that work on the TV without the hub get a tab; the other sites checked are in section 10.
 - **Player:** the TV's native AVPlay (hardware decoding).
   - Defaults to Aparat's adaptive HLS ("خودکار"), which starts about 4× faster than a 720p MP4.
     A fixed quality chosen with ▲ is remembered.
@@ -218,7 +222,8 @@ privilege was removed during the error-118 hunt; AVPlay works without it on this
 
 `hub` (last hub URL), `prefQ` (`"auto"` or a height), `displayMode`, `positions` (resume points,
 the 150 most recent), `partials` (paused downloads: download-manager id, Aparat uid, quality),
-`viaHubHosts` (sites that need the hub relay).
+`viaHubHosts` (sites that need the hub relay), `site` (last site tab), `accounts` (site logins:
+token and phone number), `deviceId` (random id sent with the Gapfilm login).
 
 ## 6. TV Hub (optional)
 
@@ -231,8 +236,15 @@ which suits the case where the TV uses the phone's hotspot.
 
 1. **Old certificate store.** The TV doesn't trust Let's Encrypt (ISRG/"YR1"/"YE2" chains), so
    `telewebion.net` and `sepehrtv.ir` fail (`PLAYER_ERROR_CONNECTION_FAILED`, XHR network
-   error). Aparat (`Certum`), `tmk.ir` (Certum) and Google-hosted sites work. The store is in
-   signed firmware and can't be changed, so the hub relays these sites over HTTP.
+   error). Aparat, Gapfilm and Google-hosted sites work. The store is in signed firmware and can't
+   be changed, so the hub relays these sites over HTTP.
+   **The issuer alone doesn't decide it.** Certum's `Certum DV TLS G2 R39 CA` leads to the 2018
+   root `Certum Trusted Root CA`, which the TV doesn't have. Servers that also send that root
+   cross-signed by the old `Certum Trusted Network CA` work (aparat.com, gapfilm.ir,
+   asset.tamashakhoneh.ir). Servers that send the self-signed 2018 root don't: `tmk.ir`,
+   `api.tmk.ir` and `api.tamashakhoneh.ir` fail with an immediate XHR network error. Check with
+   `openssl s_client -connect <host>:443 -servername <host> -showcerts`: the last `i:` line must be
+   `Certum Trusted Network CA`.
 2. **App file writing breaks at 32 MiB.** The Tizen `FileStream` API (`writeBase64`) **freezes
    the app's JavaScript** once a file reaches about 32 MB. Downloads from the first version were
    cut off at exactly **33,554,432 bytes**, and the frozen app then blocked relaunching ("wait some
@@ -285,6 +297,11 @@ which suits the case where the TV uses the phone's hotspot.
 | Delete from USB with confirmation | ✅ |
 | Live recording via hub `/record` (tested from the Mac) | ✅ valid MPEG-TS |
 | Live Telewebion playback via hub | ❌ INVALID_OPERATION (see 7.7) |
+| Gapfilm tab, rows load (direct, no hub) | ✅ 9 rows from the home page |
+| Gapfilm series → episode list → episode 1 (Reacher, direct) | ✅ started in 6.6 s |
+| Tamashakhoneh API, direct | ❌ XHR network error (certificate chain, 7.1) |
+| Tamashakhoneh / Movieland through the hub (test build, not kept) | ✅ lists; Movieland film started in 8.9 s |
+| Gapfilm login and paid titles | not tested yet (needs the account holder's phone) |
 
 ## 9. Troubleshooting
 
@@ -298,19 +315,62 @@ which suits the case where the TV uses the phone's hotspot.
 | Site plays on a computer but not on the TV | Probably a Let's Encrypt site: run the hub (Pardeh retries through it and remembers the site) |
 | WebSocket remote "unauthorized" | Re-allow the device under External Device Manager → Device Connection Manager |
 
-## 10. Open items / ideas
+## 10. Video sites checked
+
+Checked from the Mac (whose traffic leaves through a VPN in Germany) and then on the TV. "On the
+TV alone" means without the hub. Pardeh only gets a tab for sites that work on the TV alone.
+
+| Site | In Pardeh | On the TV alone | Account | Video | Notes |
+|---|---|---|---|---|---|
+| **Aparat** (aparat.com) | tab | ✅ | none | MP4 + HLS | Certum, cross-signed chain |
+| **Gapfilm** (gapfilm.ir) | tab | ✅ | free titles: none; others: subscriber login | HLS (360p–4K, H.264) + MP4 per quality, no DRM | All hosts Certum with the cross-signed chain. Paid streams answer `402 محتوا رایگان نیست` without a subscription |
+| **Tamashakhoneh** (tmk.ir, Asiatech) | — (worked through the hub in a test build) | ❌ | needed to play | HLS (`m3u8_path`), no DRM, may carry VAST ads | API servers send the self-signed 2018 Certum root (7.1); posters (`asset.tamashakhoneh.ir`) load directly. HTTP redirects to HTTPS. `tv.tmk.ir` wasn't reachable |
+| **Movieland** (movieland.af, Hindukush Bridge, Afghanistan) | — (worked through the hub in a test build) | ❌ | none | HLS 240p–1080p, no DRM | Let's Encrypt everywhere, HTTP redirects to HTTPS, and the video server answers 403 without `Referer: https://movieland.af/` (tried six player user agents) |
+| **Filmland** (Netbox) | — | — | Netbox device | — | Exclusive to Netbox Android boxes ("only usable on Netbox devices"); `filmland.ir` is a parked domain for sale; `filmland.net-box.ir` is a staff panel |
+| Telewebion / Sepehr | Live tab, via hub | ❌ | none | HLS | Let's Encrypt; see 7.7 |
+| PersianMoviesBox | — | — | — | — | Cloudflare bot check, appears to host unlicensed copies; the old domain is now a gambling site |
+
+**APIs** (all JSON; Gapfilm pages count from 0). Tamashakhoneh and Movieland are kept for later;
+through the hub they'd also need it to pass POST bodies and `x-…` headers, and to add Movieland's
+`Referer`:
+
+- **Gapfilm** `https://core.gapfilm.ir/api/`, header `SourceChannel: GF_WEBSITE`:
+  - Rows: `v3.3/GetFirstPageByPlatform?PlatformId=1&PlatformType=1&PageType=1&ParentType=2&…`, then
+    `v3.3/GetFirstPageByPlatformPaging?EntityType=1&EntityId=<row>&PageIndex=<0…>`. Pardeh uses rows
+    with no template, `SectionTemplateId` 1 (collection), 10 or 11; banners, actors (14) and
+    "continue watching" (15) are skipped.
+  - Search: `v1.0/search?Title=`. Title: `v4/Content/GetContent?Id=` (`SeasonList`).
+  - Episodes and links: `v4/Content/GetContentAttachments?Id=&seasonId=&generateLink=true`.
+    `Files` type 7 = HLS, 9 = MP4s.
+  - Images: `https://cdn.gapfilm.ir/image/400/panel/<id>/landscape.jpg`.
+  - Login: `v3.2/Account/Login {Method:1, PhoneNo}`, then `v3.2/Account/Confirm {Type:3, Code, PhoneNo}`
+    returns `Data.Token`, sent as `Authorization: bearer …`.
+- **Tamashakhoneh** `https://api.tmk.ir/v4/`, header `x-platform: 0`:
+  - Lists: `categories`, `movies/categories/<id>?page=`, `search?text=`.
+  - Series: `https://api.tamashakhoneh.ir/v5/series/<id>` (seasons) and `…/series/seasons/<id>` (episodes).
+  - Playing: `POST watch/<id>` with `x-auth-token` gives `data.m3u8_path`.
+  - Login: `POST auth/otp {mobile}` sends the SMS, then `POST auth/otp/code {mobile, code}`. The
+    token comes back in the `x-auth-token` response header. Accounts with a password answer 409;
+    they use `POST auth/login {mobile, password}`.
+- **Movieland** GraphQL at `https://api.movieland.af/graphql` (no login):
+  - Lists: `movies` / `series`, with `pageSize` at most 21 and genres as `genreSlugs`.
+  - Search: `search(term:)`.
+  - Streams: `movieById` / `episode` give `online_url`; `seriesDetails(slug).seasonsWithEpisodes`
+    lists the episodes.
+
+## 11. Open items / ideas
 
 - **Telewebion** as its own app: fix the media-sequence issue (7.7) and run the hub on the phone
   for a direct Iranian route. The Mac's route went through a VPN and was slow, about 3 Mbps.
-- **Tamashakhoneh (tmk.ir)**: free Asiatech service with a TV-compatible certificate (Certum).
-  Its web app is React with an API under `/movies`, `/series`, `/videos`. A TV build exists at
-  `tv.tmk.ir`, which wasn't reachable from the Mac.
+- **Test the Gapfilm login** with a real account (phone + SMS code on the TV), and a paid title
+  with a subscription.
+- **Tamashakhoneh on the TV alone:** look for a Tamashakhoneh server that sends the cross-signed
+  Certum chain (like `asset.tamashakhoneh.ir` does), e.g. the one its Android TV app uses. If one
+  exists, the tab can come back without the hub.
+- **Movieland** can't work on this TV without the hub (Let's Encrypt and the Referer check).
 - **Hub on Android (Termux)**, so the TV doesn't depend on the Mac.
-- PersianMoviesBox (`ispanechannel.it.com`) was not added: it sits behind a Cloudflare bot check
-  and appears to host unlicensed copies. The old `persianmoviebox.com` domain is now an unrelated
-  gambling site.
 
-## 11. Repository layout
+## 12. Repository layout
 
 ```
 app/          Pardeh Tizen web app (config.xml, index.html, css/, js/, icon.png)

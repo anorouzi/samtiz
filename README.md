@@ -4,6 +4,8 @@ A custom video app for a 2016 Samsung Smart TV (UA50KU7000, Tizen 2.4), plus eve
 to build, sign and install it.
 
 - **Aparat:** search, categories, adaptive playback that starts in about 2–3 s on the TV.
+- **Gapfilm tab:** the site's own categories, search, free titles without an account, series as
+  episode lists. Logging in happens on the TV: phone number, then the SMS code.
 - **Remote-first UI** in Persian: a seek bar with preview and acceleration, number-key jumps, a
   help screen on Info, and every color and media key mapped.
 - **USB:** play files from the stick, and save videos to it through the TV's download manager,
