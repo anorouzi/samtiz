@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <title>Pardeh</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+<body>
+    <!-- Browse screen -->
+    <div id="browse">
+        <div id="topbar">
+            <div class="logo"><span class="logo-mark">▶</span> پرده</div>
+            <input id="search" type="text" placeholder="جستجو در آپارات..." dir="auto">
+            <div id="btn-live" class="btn">زنده</div>
+            <div id="btn-link" class="btn">لینک</div>
+            <div id="btn-phone" class="btn">گوشی</div>
+            <div id="btn-usb" class="btn">USB</div>
+        </div>
+        <div id="chips"></div>
+        <div id="status"></div>
+        <div id="grid"></div>
+        <div id="legend">
+            <span class="key red">A</span>زنده
+            <span class="key green">B</span>جستجو
+            <span class="key yellow">C</span>USB
+            <span class="key blue">D</span>لینک
+            <span class="key dark">1-9</span>دسته‌ها
+            <span class="key dark">CH</span>صفحه بعد/قبل
+            <span class="key dark rec">●</span>ذخیره در USB
+            <span class="key dark">Info</span>راهنما
+        </div>
+    </div>
+
+    <!-- Link dialog -->
+    <div id="link-dialog" class="hidden">
+        <div class="dialog-box">
+            <div class="dialog-title">لینک ویدیو را وارد کنید</div>
+            <div class="dialog-hint">لینک آپارات (aparat.com/v/...) یا لینک مستقیم mp4 / m3u8</div>
+            <input id="link-input" type="text" dir="ltr" placeholder="https://">
+        </div>
+    </div>
+
+    <!-- Send-from-phone dialog -->
+    <div id="phone-dialog" class="hidden">
+        <div class="dialog-box phone-box">
+            <div id="qr"></div>
+            <div class="phone-text">
+                <div class="dialog-title">ارسال لینک از گوشی</div>
+                <div class="dialog-hint">با دوربین گوشی این کد را اسکن کنید، لینک ویدیو را بچسبانید و «پخش در تلویزیون» را بزنید.</div>
+                <div id="hub-url" dir="ltr"></div>
+                <div id="hub-state" class="dialog-hint"></div>
+                <div class="dialog-hint">بدون هاب: در برنامهٔ SmartThings روی گوشی، ریموت تلویزیون را باز کنید، دکمهٔ «لینک» را اینجا بزنید و لینک را با کیبورد گوشی بچسبانید.</div>
+                <div class="dialog-hint">Back برای بستن</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player screen -->
+    <div id="player" class="hidden">
+        <object id="av-player" type="application/avplayer"></object>
+        <div id="spinner" class="hidden"><div class="spin"></div><div id="spinner-text"></div></div>
+        <div id="pause-icon" class="hidden"><span></span><span></span></div>
+        <div id="osd">
+            <div id="osd-top">
+                <div id="osd-quality"></div>
+                <div id="osd-title" dir="auto"></div>
+            </div>
+            <div id="osd-seek">
+                <div id="osd-cur"></div>
+                <div id="osd-bar">
+                    <div id="osd-track"><div id="osd-progress"></div></div>
+                    <div id="osd-knob"></div>
+                    <div id="osd-bubble" class="hidden"></div>
+                </div>
+                <div id="osd-dur"></div>
+            </div>
+            <div id="osd-hint">◀ ▶ جلو/عقب (نگه دارید = سریع‌تر) · OK مکث · ▲ کیفیت · ▼ منو · ● ذخیره · Info راهنما</div>
+        </div>
+    </div>
+
+    <div id="menu" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+    <div id="job-badge" class="hidden"></div>
+
+    <!-- Remote help (Info button) -->
+    <div id="help" class="hidden">
+        <div class="help-box">
+            <div class="help-title">راهنمای دکمه‌های ریموت</div>
+            <div class="help-cols">
+                <div class="help-col">
+                    <div class="help-head">هنگام تماشا</div>
+                    <div class="row"><b>OK / پخش-مکث</b>مکث و ادامه</div>
+                    <div class="row"><b>◀ ▶</b>۱۰ ثانیه عقب/جلو — نگه دارید تا سریع‌تر شود</div>
+                    <div class="row"><b>عقب/جلو سریع</b>۱ دقیقه</div>
+                    <div class="row"><b>1 تا 9</b>پرش به ۱۰٪ تا ۹۰٪ ویدیو · <b class="in">0</b>از اول</div>
+                    <div class="row"><b>CH ▲▼</b>ویدیو یا شبکهٔ قبلی/بعدی</div>
+                    <div class="row"><b>▲</b>انتخاب کیفیت</div>
+                    <div class="row"><b>▼ / Tools</b>منو: ذخیره، نمایش، بعدی</div>
+                    <div class="row"><b class="rec">●</b>ذخیره در USB — دوباره: توقف</div>
+                    <div class="row"><b>■</b>توقف پخش · <b class="in">Back</b>برگشت</div>
+                </div>
+                <div class="help-col">
+                    <div class="help-head">در فهرست‌ها</div>
+                    <div class="row"><b>جهت‌ها / OK</b>حرکت و انتخاب</div>
+                    <div class="row"><b>1 تا 9</b>دسته‌ها · <b class="in">0</b>جستجو</div>
+                    <div class="row"><b>CH ▲▼</b>صفحهٔ بعد/قبل</div>
+                    <div class="row"><b class="k red">A</b>پخش زنده <b class="k green">B</b>جستجو</div>
+                    <div class="row"><b class="k yellow">C</b>فایل‌های USB <b class="k blue">D</b>باز کردن لینک</div>
+                    <div class="row"><b>Back</b>برگشت — دو بار: خروج</div>
+                    <div class="help-head">فایل‌های USB</div>
+                    <div class="row"><b>OK</b>پخش · فایل ناقص: ادامهٔ دانلود</div>
+                    <div class="row"><b>نگه‌داشتن OK / Tools</b>گزینه‌ها و حذف</div>
+                </div>
+            </div>
+            <div class="help-foot">برای بستن هر دکمه‌ای را بزنید</div>
+        </div>
+    </div>
+
+    <script src="js/lib/qrcode.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

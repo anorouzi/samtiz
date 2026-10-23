@@ -1,0 +1,11 @@
+{
+  "name": "pardeh-tv-hub",
+  "version": "1.0.0",
+  "description": "Optional helper for the Pardeh TV app: send links from a phone, relay modern-HTTPS streams, record live streams",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

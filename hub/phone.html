@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ارسال به تلویزیون</title>
+<style>
+    :root { --bg: #0f1115; --card: #1b1e26; --line: #2a2e38; --text: #e8eaf0; --muted: #9aa0ad; --accent: #ff4d6d; --ok: #3ecf8e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Tahoma, -apple-system, sans-serif; padding: 20px 16px 40px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+    .status { display: inline-block; font-size: 13px; padding: 4px 12px; border-radius: 20px; background: var(--card); margin-bottom: 18px; }
+    .status.on { color: var(--ok); } .status.off { color: var(--accent); }
+    textarea { width: 100%; min-height: 96px; font-size: 16px; padding: 12px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); color: var(--text); direction: ltr; resize: vertical; }
+    textarea:focus { outline: none; border-color: var(--accent); }
+    button { width: 100%; margin-top: 12px; padding: 16px; font-size: 18px; font-weight: bold; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font-family: inherit; }
+    button:disabled { opacity: .5; }
+    .msg { margin-top: 14px; font-size: 15px; min-height: 22px; }
+    h2 { font-size: 16px; color: var(--muted); margin: 30px 0 10px; }
+    .item { background: var(--card); border-radius: 10px; padding: 12px; margin-bottom: 8px; font-size: 14px; word-break: break-all; }
+    .item .t { margin-bottom: 4px; }
+    .item .u { color: var(--muted); direction: ltr; text-align: left; font-size: 12px; }
+    .item button { margin-top: 8px; padding: 8px; font-size: 14px; background: var(--line); }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.8; margin-top: 24px; }
+</style>
+</head>
+<body>
+    <h1>📺 ارسال به تلویزیون</h1>
+    <div class="sub">لینک ویدیو را بچسبانید و روی «پخش در تلویزیون» بزنید</div>
+    <div id="status" class="status">در حال بررسی...</div>
+
+    <textarea id="url" placeholder="https://www.aparat.com/v/..." autocomplete="off"></textarea>
+    <button id="send">▶ پخش در تلویزیون</button>
+    <div id="msg" class="msg"></div>
+
+    <h2>ارسال‌های اخیر</h2>
+    <div id="recent"><div class="item">هنوز چیزی ارسال نشده</div></div>
+
+    <div class="hint">
+        پشتیبانی: لینک آپارات، لینک مستقیم mp4 / m3u8، و لینک صفحهٔ بسیاری از سایت‌های ویدیو.<br>
+        تلویزیون باید برنامهٔ TV Player را باز داشته باشد.
+    </div>
+
+<script>
+    var $ = function (id) { return document.getElementById(id); };
+
+    function esc(t) { var d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
+
+    function send(url) {
+        url = (url || $('url').value).trim();
+        var m = url.match(/https?:\/\/\S+/);
+        if (!m) { $('msg').textContent = 'لطفاً یک لینک معتبر وارد کنید'; return; }
+        $('send').disabled = true;
+        $('msg').textContent = 'در حال ارسال...';
+        fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: m[0] }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { $('msg').textContent = '❌ ' + (d.error || 'خطا'); return; }
+                $('msg').textContent = d.tvs ? '✅ روی تلویزیون پخش شد' + (d.title ? ': ' + d.title : '') : '⚠️ ارسال شد، ولی TV Player روی تلویزیون باز نیست';
+                $('url').value = '';
+                refresh();
+            })
+            .catch(function () { $('msg').textContent = '❌ اتصال به هاب برقرار نشد'; })
+            .then(function () { $('send').disabled = false; });
+    }
+
+    function refresh() {
+        fetch('/api/status').then(function (r) { return r.json(); }).then(function (d) {
+            var s = $('status');
+            s.className = 'status ' + (d.tvs ? 'on' : 'off');
+            s.textContent = d.tvs ? '● تلویزیون متصل است' : '● تلویزیون متصل نیست — TV Player را باز کنید';
+            if (d.recent.length) {
+                $('recent').innerHTML = d.recent.map(function (r, i) {
+                    return '<div class="item"><div class="t">' + esc(r.title || 'ویدیو') + '</div><div class="u">' + esc(r.source) +
+                        '</div><button data-i="' + i + '">دوباره پخش کن</button></div>';
+                }).join('');
+                var btns = $('recent').querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    btns[i].onclick = function () { send(d.recent[this.getAttribute('data-i')].source); };
+                }
+            }
+        }).catch(function () {
+            $('status').className = 'status off';
+            $('status').textContent = '● هاب در دسترس نیست';
+        });
+    }
+
+    $('send').onclick = function () { send(); };
+    // Allows sharing via a shortcut: http://<hub>/?url=<link>
+    var q = new URLSearchParams(location.search).get('url');
+    if (q) { $('url').value = q; send(q); }
+    refresh();
+    setInterval(refresh, 5000);
+</script>
+</body>
+</html>
