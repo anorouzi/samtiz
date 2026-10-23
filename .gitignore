@@ -29,3 +29,7 @@ node_modules/
 .DS_Store
 .vscode/
 .idea/
+
+# Python
+__pycache__/
+*.pyc
