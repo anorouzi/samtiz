@@ -39,7 +39,7 @@ manager quirks), with test results.
 | `hub/` | Optional Node helper: phone sending, HTTPS relay, live recording, diagnostics |
 | `tools/` | Deploy script, WebSocket remote, store-app remover, icon generator, yt-dlp fetcher |
 | `certificates/` | How to create the Samsung certificate (the keys are never committed) |
-| `docs/` | Complete report |
+| `docs/` | Complete report, and [the full Claude Code chat session](docs/chat-session.md) that built all of this (secrets redacted) |
 
 Third-party code: `app/js/lib/qrcode.js`, the QR code generator by Kazuhiko Arase (MIT, header
 kept).

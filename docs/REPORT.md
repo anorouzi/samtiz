@@ -315,7 +315,7 @@ which suits the case where the TV uses the phone's hotspot.
 ```
 app/          Pardeh Tizen web app (config.xml, index.html, css/, js/, icon.png)
 hub/          Optional TV Hub (Node) + phone page
-tools/        deploy.sh, tv-remote.mjs, remove-store-apps.sh, make-icon.py, get-yt-dlp.sh
+tools/        deploy.sh, tv-remote.mjs, remove-store-apps.sh, make-icon.py, get-yt-dlp.sh, export-chat.py
 certificates/ How to create the Samsung certificate (files themselves are git-ignored)
-docs/         This report
+docs/         This report + chat-session.md (the whole Claude Code session, secrets redacted)
 ```
