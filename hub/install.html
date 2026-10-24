@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>نصب پرده روی تلویزیون</title>
+<style>
+    :root { --bg: #0f1115; --card: #1b1e26; --line: #2a2e38; --text: #e8eaf0; --muted: #9aa0ad; --accent: #ff4d6d; --ok: #3ecf8e; --warn: #f5c542; }
+    * { box-sizing: border-box; }
+    body { margin: 0 auto; max-width: 680px; background: var(--bg); color: var(--text); font-family: Tahoma, -apple-system, sans-serif; padding: 20px 16px 40px; line-height: 1.8; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+    .step { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 14px; border: 2px solid transparent; }
+    .step.done { border-color: var(--ok); }
+    .step h2 { font-size: 17px; margin: 0 0 8px; }
+    .step h2 .n { display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: var(--line); margin-left: 8px; font-size: 14px; }
+    .step.done h2 .n { background: var(--ok); color: #000; }
+    ol { margin: 0; padding-right: 20px; font-size: 14px; }
+    .ip { direction: ltr; display: inline-block; font-size: 20px; font-weight: bold; color: var(--accent); }
+    button { width: 100%; margin-top: 10px; padding: 14px; font-size: 17px; font-weight: bold; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font-family: inherit; cursor: pointer; }
+    button.second { background: var(--line); font-size: 15px; padding: 10px; }
+    button:disabled { opacity: .45; cursor: default; }
+    input { width: 100%; margin-top: 10px; padding: 12px; font-size: 16px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--text); direction: ltr; }
+    .tv { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 14px; }
+    .tv .s { font-size: 13px; }
+    .ok { color: var(--ok); } .bad { color: var(--accent); } .warn { color: var(--warn); }
+    .note { color: var(--muted); font-size: 13px; }
+    #log { background: #000; border-radius: 10px; padding: 10px 12px; font-size: 13px; min-height: 40px; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+</style>
+</head>
+<body>
+    <h1>📺 نصب «پرده» روی تلویزیون سامسونگ</h1>
+    <div class="sub">برای تلویزیون‌های سامسونگ با سیستم Tizen (از سال ۲۰۱۵ به بعد)، روی همان وای‌فای این دستگاه.</div>
+
+    <div id="noapp" class="step bad" style="display:none">پوشهٔ برنامهٔ پرده (app) کنار هاب نیست. هاب را از داخل پوشهٔ پروژه اجرا کنید: <bdi dir="ltr">cd samtiz/hub &amp;&amp; node server.mjs</bdi></div>
+
+    <div class="step" id="s1">
+        <h2><span class="n">۱</span>تلویزیون را آماده کنید (یک بار)</h2>
+        <ol>
+            <li>در تلویزیون بخش <b>Apps</b> (برنامه‌ها) را باز کنید و با ریموت <bdi dir="ltr"><b>1 2 3 4 5</b></bdi> را بزنید.</li>
+            <li><b>Developer mode</b> را روی <b>On</b> بگذارید و در <b>Host PC IP</b> این عدد را بنویسید:<br><span class="ip" id="myip">…</span></li>
+            <li>OK بزنید و تلویزیون را <b>کامل</b> خاموش و روشن کنید (دکمهٔ پاور را چند ثانیه نگه دارید).</li>
+        </ol>
+    </div>
+
+    <div class="step" id="s2">
+        <h2><span class="n">۲</span>تلویزیون را پیدا کنید</h2>
+        <button id="scan" class="second">🔍 جستجوی تلویزیون‌ها در شبکه</button>
+        <div id="tvs"></div>
+        <input id="ip" placeholder="یا IP تلویزیون را بنویسید، مثل 192.168.1.20">
+        <button id="connect">اتصال به تلویزیون</button>
+        <div id="tvinfo" class="note"></div>
+    </div>
+
+    <div class="step" id="s3">
+        <h2><span class="n">۳</span>ورود به حساب سامسونگ</h2>
+        <div class="note">تلویزیون فقط برنامه‌ای را نصب می‌کند که با گواهی سامسونگِ مخصوص همان تلویزیون امضا شده باشد. با یک حساب سامسونگ (رایگان) وارد شوید تا گواهی ساخته شود — یک بار برای هر تلویزیون.</div>
+        <div id="samedevice" class="warn" style="display:none">⚠️ ورود باید در مرورگرِ همان دستگاهی باشد که هاب روی آن اجرا شده (سامسونگ مرورگر را به localhost برمی‌گرداند). این صفحه را روی همان دستگاه با آدرس <span dir="ltr">http://localhost:8090/install</span> باز کنید.</div>
+        <button id="signin" disabled>ورود به حساب سامسونگ</button>
+    </div>
+
+    <div class="step" id="s4">
+        <h2><span class="n">۴</span>نصب</h2>
+        <button id="install" disabled>⬇ نصب پرده روی تلویزیون</button>
+    </div>
+
+    <div id="log">…</div>
+
+<script>
+    var $ = function (id) { return document.getElementById(id); };
+    var state = {};
+    var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+
+    function post(path, body) {
+        return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+            .then(function (r) { return r.json().then(function (d) { if (!r.ok) { throw new Error(d.error || r.status); } return d; }); });
+    }
+
+    function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    function refresh() {
+        return fetch('/install/state').then(function (r) { return r.json(); }).then(function (d) {
+            state = d;
+            $('myip').textContent = d.addresses.join('  یا  ') || '؟';
+            $('noapp').style.display = d.appFound ? 'none' : 'block';
+            var tv = d.tv;
+            $('s2').className = 'step' + (tv ? ' done' : '');
+            $('tvinfo').innerHTML = tv ? '<span class="ok">✓ وصل شد: <bdi>' + esc(tv.name || tv.ip) + '</bdi> — <bdi>' + esc(tv.model || '') + '</bdi></span>' : '';
+            $('s3').className = 'step' + (d.hasCert ? ' done' : '');
+            $('signin').disabled = !tv || d.busy;
+            $('signin').textContent = d.hasCert ? 'گواهی این تلویزیون آماده است ✓ (ورود دوباره)' : 'ورود به حساب سامسونگ';
+            $('samedevice').style.display = tv && !d.hasCert && !local ? 'block' : 'none';
+            $('install').disabled = !tv || !d.hasCert || d.busy;
+            $('connect').disabled = d.busy;
+            $('log').textContent = d.log.length ? d.log.map(function (l) { return '• ' + l.msg; }).join('\n') : 'مراحل بالا را به ترتیب انجام دهید.';
+            $('log').scrollTop = $('log').scrollHeight;
+            if (/نصب شد ✓/.test(d.log.length && d.log[d.log.length - 1].msg)) { $('s4').className = 'step done'; }
+        });
+    }
+
+    function say(msg) { $('log').textContent += '\n• ' + msg; }
+
+    $('scan').onclick = function () {
+        $('scan').disabled = true;
+        $('tvs').innerHTML = '<div class="note">در حال جستجو (تا ۲۰ ثانیه)...</div>';
+        post('/install/scan').then(function (d) {
+            $('tvs').innerHTML = d.tvs.length ? d.tvs.map(function (t) {
+                var mine = state.addresses.indexOf(t.developerIP) !== -1;
+                var s = !t.developerMode ? '<span class="bad">Developer mode خاموش است (مرحلهٔ ۱)</span>'
+                    : mine ? '<span class="ok">آمادهٔ اتصال ✓</span>'
+                    : '<span class="warn">Developer mode روشن است ولی IP آن ' + esc(t.developerIP) + ' است — IP این دستگاه را بنویسید (مرحلهٔ ۱)</span>';
+                return '<div class="tv"><bdi><b>' + esc(t.name) + '</b></bdi> · <bdi>' + esc(t.model) + '</bdi> · <bdi dir="ltr">' + esc(t.ip) + '</bdi><div class="s">' + s +
+                    '</div><button class="second" data-ip="' + esc(t.ip) + '">انتخاب</button></div>';
+            }).join('') : '<div class="note">تلویزیونی پیدا نشد — روشن است و به همین وای‌فای وصل است؟ IP آن را دستی بنویسید.</div>';
+            Array.prototype.forEach.call($('tvs').querySelectorAll('button'), function (b) {
+                b.onclick = function () { $('ip').value = b.getAttribute('data-ip'); $('connect').onclick(); };
+            });
+        }).catch(function (e) { $('tvs').innerHTML = '<div class="bad">' + esc(e.message) + '</div>'; })
+          .then(function () { $('scan').disabled = false; });
+    };
+
+    $('connect').onclick = function () {
+        var ip = $('ip').value.trim();
+        if (!ip) { return say('IP تلویزیون را بنویسید یا جستجو کنید'); }
+        $('connect').disabled = true;
+        say('در حال اتصال به ' + ip + ' ...');
+        post('/install/connect', { ip: ip }).then(refresh).catch(function (e) { refresh().then(function () { say(e.message); }); });
+    };
+
+    $('signin').onclick = function () {
+        post('/install/signin').then(function (d) {
+            window.open(d.url, '_blank');
+            say('صفحهٔ ورود سامسونگ باز شد — وارد شوید و بعد به این صفحه برگردید');
+        }).catch(function (e) { say(e.message); });
+    };
+
+    $('install').onclick = function () {
+        $('install').disabled = true;
+        post('/install/run').then(refresh).catch(function (e) { say(e.message); });
+    };
+
+    refresh();
+    setInterval(refresh, 1500);
+</script>
+</body>
+</html>

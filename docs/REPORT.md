@@ -128,6 +128,15 @@ $SDB -s <tv-ip>:26101 push ~/SamsungCertificate/TVPlayer/device-profile.xml /hom
 
 Details are in `certificates/README.md`. The certificate files aren't in this repository.
 
+**Other people's TVs.** A `.wgt` can't be installed from USB: Samsung only allows USB installs of
+`.tmg` packages from its seller-only USB Demo Packaging Tool, and that service has been shut down.
+The hub's `/install` page does the whole process over Wi-Fi instead, without Tizen Studio (section 6).
+It reads the TV's DUID, gets a Samsung certificate for it after a Samsung account sign-in, signs
+the app and installs it. It reproduces Certificate Manager's requests: the sign-in redirect to
+`localhost:4794/signin/callback`, and `svdca.samsungqbe.com/apis/v3/authors` and `/distributors`
+with `platform=VD`. The `/distributors` answer is the `device-profile.xml` itself; its
+`<Certificate>` is the distributor certificate.
+
 ### 4.5 Build, install, run
 
 ```bash
@@ -228,7 +237,10 @@ token and phone number), `deviceId` (random id sent with the Gapfilm login).
 ## 6. TV Hub (optional)
 
 `hub/server.mjs` is Node with no packages. See `hub/README.md`. It adds phone sending (QR code),
-the modern-HTTPS relay, live recording, and diagnostics. The app finds it automatically by
+the modern-HTTPS relay, live recording, and diagnostics. Its `/install` page installs Pardeh on
+other Samsung TVs over Wi-Fi (`installer.mjs`, `sdb.mjs`, `signing.mjs`). The signing output was
+checked byte for byte against a Tizen Studio build, and the whole flow was run against a simulated
+TV. It hasn't yet been tried on a second real TV. The app finds it automatically by
 scanning the subnet for port 8090. It can run on the Mac, or on an Android phone with Termux,
 which suits the case where the TV uses the phone's hotspot.
 
@@ -364,6 +376,8 @@ through the hub they'd also need it to pass POST bodies and `x-…` headers, and
   for a direct Iranian route. The Mac's route went through a VPN and was slow, about 3 Mbps.
 - **Test the Gapfilm login** with a real account (phone + SMS code on the TV), and a paid title
   with a subscription.
+- **Test the `/install` page on a real TV:** first this TV, which needs a new certificate made by
+  the page, then a friend's. Watch whether the device profile from `/distributors` is accepted as is.
 - **Tamashakhoneh on the TV alone:** look for a Tamashakhoneh server that sends the cross-signed
   Certum chain (like `asset.tamashakhoneh.ir` does), e.g. the one its Android TV app uses. If one
   exists, the tab can come back without the hub.
@@ -374,7 +388,7 @@ through the hub they'd also need it to pass POST bodies and `x-…` headers, and
 
 ```
 app/          Pardeh Tizen web app (config.xml, index.html, css/, js/, icon.png)
-hub/          Optional TV Hub (Node) + phone page
+hub/          Optional TV Hub (Node) + phone page + /install page (installer.mjs, sdb.mjs, signing.mjs, samsung-ca/)
 tools/        deploy.sh, tv-remote.mjs, remove-store-apps.sh, make-icon.py, get-yt-dlp.sh, export-chat.py
 certificates/ How to create the Samsung certificate (files themselves are git-ignored)
 docs/         This report + chat-session.md (the whole Claude Code session, secrets redacted)

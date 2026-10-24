@@ -19,7 +19,8 @@ app/.manifest.tmp
 build/
 *.wgt
 
-# TV Hub runtime files
+# TV Hub runtime files (certs/ holds the per-TV Samsung certificates and their private keys)
+hub/certs/
 hub/bin/
 hub/tv.log
 hub/hub.out

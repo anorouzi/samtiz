@@ -7,8 +7,9 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { handleInstall } from './installer.mjs';
 
-const PORT = 8090;
+const PORT = Number(process.env.HUB_PORT) || 8090;   // Pardeh looks for 8090; another port is for testing
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const YTDLP = path.join(DIR, 'bin', 'yt-dlp');
 const LOG = path.join(DIR, 'tv.log');
@@ -168,6 +169,14 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/' || pathname === '/index.html') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         return fs.createReadStream(path.join(DIR, 'phone.html')).pipe(res);
+    }
+
+    // Installing Pardeh on a TV over Wi-Fi (see installer.mjs).
+    if (pathname === '/install' || pathname.startsWith('/install/')) {
+        try { return await handleInstall(req, res, pathname); } catch (e) {
+            if (!res.headersSent) { res.writeHead(500); res.end(String(e.message)); }
+            return;
+        }
     }
 
     // TVs keep this open and receive "play" commands.

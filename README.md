@@ -11,6 +11,9 @@ to build, sign and install it.
 - **USB:** play files from the stick, and save videos to it through the TV's download manager,
   with pause, resume and delete.
 - **Links** from anywhere, including from your phone through the optional **TV Hub** (QR code).
+- **Install on other TVs:** the hub's `/install` page installs Pardeh on any Samsung Tizen TV on
+  the same Wi-Fi, from a computer or an Android phone, without Tizen Studio. See
+  [hub/README.md](hub/README.md).
 
 The full story is in **[docs/REPORT.md](docs/REPORT.md)**: TV discovery, firmware, Developer
 Mode, Tizen Studio on Apple Silicon, Samsung certificates and error 118, the removed apps, and the
