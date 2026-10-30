@@ -8,13 +8,15 @@ computer is needed.
   this phone, and explains what to change if not.
 - **Help in Persian**, step by step: Apps → `1 2 3 4 5` → Developer mode **On** → Host PC IP = the
   phone's address (shown in big digits) → full restart.
-- **Setup from the phone, one button:** you open the TV's Apps screen from Home (with the
-  card's own Home, arrows and OK) and press «تنظیم خودکار». The app presses `1 2 3 4 5`, moves to
-  the first Host PC IP box, types the phone's IP with number keys (Left moves to the next box on
-  this TV, and the boxes are filled in one pass from the first, since going back through a box
-  empties it), selects OK, and holds power for 5.5 s for a full restart. It then waits until the
-  TV reports this phone as its `developerIP`. If Developer Mode was off, it stops once and asks you
-  to pick **On** before it goes on. The TV never sends `ms.remote.imeStart` and its IP boxes ignore
+- **Setup from the phone, one button:** you open the TV's Apps screen from the Home bar **with the
+  TV's own remote** (on Apps opened any other way, the TV ignores the code), then press
+  «تنظیم خودکار». The app presses `1 2 3 4 5`, types the phone's IP into the Host PC IP boxes with
+  number keys (Left moves to the next box on this TV; the boxes are filled in one pass from the
+  first, since going back through a box empties it), selects OK, and holds power for 5.5 s for a
+  full restart. It then waits until the TV reports this phone as its `developerIP`. The TV gives no
+  sign when the window opens and reports the old IP until the restart, so the app asks yes/no at
+  those points (window open? boxes right?) instead of pressing on blind. If Developer Mode was off,
+  it also asks you to pick **On**. The TV never sends `ms.remote.imeStart` and its IP boxes ignore
   `SendInputString`, so keys are the only way.
 - **Installs Pardeh** with the parts you choose: Aparat, Gapfilm, live TV (Telewebion), links,
   sending from the phone, USB. The first time on each TV it asks you to sign in with a Samsung

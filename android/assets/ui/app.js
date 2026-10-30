@@ -296,11 +296,14 @@ function playOnTv(url) {
 }
 
 // ---------- setting up Developer Mode from the phone ----------
-// What works on a 2016 TV (found by trying on one): with the Apps screen open (opened from the
-// Home bar), 1 2 3 4 5 opens the Developer mode window. Down goes to the first Host PC IP box;
-// the boxes take number keys, Left moves to the next box and Right back (passing back through a
-// box empties it, so the boxes are filled in one pass from the first). Down from the last box is
-// OK. The new IP only takes effect after a full restart (a long press on power).
+// What worked on a 2016 TV (found by trying on one, step by step):
+// - Open Apps with the TV's own remote from the Home bar. Only then does 1 2 3 4 5 (sent from here)
+//   open the Developer mode window; on Apps opened any other way the TV ignores the code.
+// - Down, OK: the first Host PC IP box is selected. The boxes take number keys; Left moves to the
+//   next box and Right back, and passing back through a box empties it, so all four are filled in
+//   one pass from the first (Right ×4 first makes sure it starts there).
+// - Down from the last box selects OK. The TV keeps reporting the old IP until a full restart
+//   (power held for 5.5 s), and it gives no sign when the window opens, so the app asks you.
 function setupState(html) { $('setup-state').innerHTML = html; }
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -327,7 +330,33 @@ async function waitForNewIp(minutes) {
     return false;
 }
 
-let setupContinue = null;
+// Shows a question with yes / no (no is optional) and "stop"; resolves true or false, or rejects on stop.
+let answer = null;
+function ask(html, yes, no) {
+    setupState(html);
+    $('setup-yes').textContent = yes;
+    $('setup-no').textContent = no || '';
+    $('setup-no').classList.toggle('hidden', !no);
+    $('setup-ask').classList.remove('hidden');
+    return new Promise((ok, fail) => { answer = { ok, fail }; });
+}
+function answered(how) {
+    const a = answer;
+    answer = null;
+    $('setup-ask').classList.add('hidden');
+    if (!a) return;
+    if (how === 'stop') a.fail(new Error('متوقف شد.')); else a.ok(how === 'yes');
+}
+$('setup-yes').addEventListener('click', () => answered('yes'));
+$('setup-no').addEventListener('click', () => answered('no'));
+$('setup-stop').addEventListener('click', () => answered('stop'));
+
+async function typeIp(parts) {
+    for (let i = 0; i < 4; i++) {
+        if (i) await press(['KEY_LEFT']);
+        await press(parts[i].split('').map((d) => 'KEY_' + d));
+    }
+}
 
 $('auto-setup').addEventListener('click', async () => {
     const ip = myIps()[0];
@@ -336,37 +365,42 @@ $('auto-setup').addEventListener('click', async () => {
     $('auto-setup').disabled = true;
     try {
         const sock = await tvSocket();
-        setupState('زدن ۱ ۲ ۳ ۴ ۵ ...');
-        await press(['KEY_1', 'KEY_2', 'KEY_3', 'KEY_4', 'KEY_5']);
-        await pause(2500);
+        // 1. The code, until you see the window.
+        for (let tries = 0; ; tries++) {
+            setupState('زدن ۱ ۲ ۳ ۴ ۵ روی تلویزیون...');
+            await press(['KEY_1', 'KEY_2', 'KEY_3', 'KEY_4', 'KEY_5']);
+            await pause(1500);
+            const hint = tries ? '<br><span class="warn">اگر باز نمی‌شود: با <b>ریموت خود تلویزیون</b> دکمهٔ Home را بزنید، روی <b>Apps</b> بروید و OK بزنید، بعد «دوباره» را بزنید.</span>' : '';
+            if (await ask('پنجرهٔ <b>Developer mode</b> روی تلویزیون باز شد؟' + hint, 'بله، باز شد', 'نه، دوباره بزن')) break;
+        }
+        // 2. Developer mode On (already on if it was on before).
         if (!tv.developerMode) {
-            // A TV that never had Developer mode on: switching it on is left to you, once.
-            setupState('در پنجرهٔ Developer mode گزینهٔ <b>On</b> را انتخاب کنید (با دکمه‌های پایین)، بعد «ادامه» را بزنید.');
-            $('setup-continue').classList.remove('hidden');
-            await new Promise((r) => { setupContinue = r; });
-            $('setup-continue').classList.add('hidden');
+            await ask('در پنجره، <b>On</b> را انتخاب کنید (با دکمه‌های ◀ ▶ ▲ ▼ و OK بالا).', 'انتخاب شد، ادامه');
         }
-        setupState(`نوشتن IP گوشی (<span class="ip">${esc(ip)}</span>) ...`);
-        await press(['KEY_DOWN', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT']);
-        for (let i = 0; i < 4; i++) {
-            if (i) await press(['KEY_LEFT']);
-            await press(parts[i].split('').map((d) => 'KEY_' + d));
+        // 3. The IP, in one pass from the first box, until you see it right.
+        setupState(`نوشتن IP گوشی (<span class="ip">${esc(ip)}</span>)...`);
+        await press(['KEY_DOWN', 'KEY_ENTER', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT']);
+        await typeIp(parts);
+        while (!await ask(`کادرهای Host PC IP روی تلویزیون <span class="ip">${esc(parts.join(' . '))}</span> را نشان می‌دهند؟`, 'بله، ذخیره و راه‌اندازی دوباره', 'نه، دوباره بنویس')) {
+            setupState('نوشتن دوباره...');
+            await press(['KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT']);
+            await typeIp(parts);
         }
-        setupState('ذخیره (OK) ...');
+        // 4. OK, then a full restart.
+        setupState('ذخیره (OK)...');
         await press(['KEY_DOWN', 'KEY_ENTER'], 900);
         await pause(1500);
-        setupState('خاموش و روشن کردن کامل تلویزیون (حدود یک دقیقه)...');
+        setupState('خاموش و روشن کردن کامل تلویزیون... (تا ۳ دقیقه صبر کنید)');
         await restartTv(sock);
         if (await waitForNewIp(3)) setupState('<span class="ok">تمام شد ✓ تلویزیون حالا با این گوشی کار می‌کند.</span><button data-go="install">رفتن به نصب</button>');
-        else setupState('<span class="warn">IP تازه هنوز فعال نشده.</span> اگر تلویزیون خاموش ماند با ریموت روشنش کنید؛ اگر روشن است، کار را دوباره امتحان کنید (اول صفحهٔ Apps را از Home باز کنید).');
+        else setupState('<span class="warn">IP تازه هنوز فعال نشده.</span> اگر تلویزیون خاموش ماند، با ریموت روشنش کنید و چند ثانیه بعد «جستجوی دوباره» را بزنید. اگر روشن ماند، دکمهٔ پاور ریموت را ۵ ثانیه نگه دارید.');
         $('setup-state').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
     } catch (e) {
         setupState(`<span class="bad">${esc(e.message)}</span>`);
     }
+    $('setup-ask').classList.add('hidden');
     $('auto-setup').disabled = false;
 });
-
-$('setup-continue').addEventListener('click', () => { if (setupContinue) { setupContinue(); setupContinue = null; } });
 
 // ---------- link page ----------
 function linkIn(text) {

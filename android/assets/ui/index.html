@@ -29,7 +29,7 @@
             <div class="card hidden" id="setup">
                 <h2>تنظیم خودکار از روی گوشی</h2>
                 <ol class="steps">
-                    <li>صفحهٔ <b>Apps</b> (برنامه‌ها) را روی تلویزیون باز کنید: دکمهٔ <b>⌂ خانه</b> پایین را بزنید، با ◀ ▶ روی <b>Apps</b> بروید و <b>OK</b> بزنید.
+                    <li>با <b>ریموت خود تلویزیون</b> دکمهٔ <b>Home</b> را بزنید، روی <b>Apps</b> (برنامه‌ها) بروید و <b>OK</b> بزنید. (فقط وقتی Apps این‌طور باز شود، تلویزیون کد را قبول می‌کند.) دکمه‌های زیر برای قدم‌های بعدی‌اند.
                         <div class="row3">
                             <button class="key" data-key="KEY_HOME">⌂ خانه</button>
                             <button class="key" data-key="KEY_RETURN">↩ برگشت</button>
@@ -43,11 +43,15 @@
                             <button class="key down" data-key="KEY_DOWN">▼</button>
                         </div>
                     </li>
-                    <li>وقتی صفحهٔ Apps باز شد، این دکمه را بزنید. بقیه را برنامه خودش انجام می‌دهد (کد ۱۲۳۴۵، نوشتن IP گوشی، OK و خاموش و روشن کردن تلویزیون).
+                    <li>وقتی صفحهٔ Apps باز شد، این دکمه را بزنید. برنامه کد ۱۲۳۴۵ را می‌زند، IP گوشی را می‌نویسد، OK می‌زند و تلویزیون را کامل خاموش و روشن می‌کند. هر جا لازم باشد از شما می‌پرسد روی تلویزیون چه می‌بینید.
                         <button id="auto-setup">⚙ تنظیم خودکار تلویزیون</button></li>
                 </ol>
                 <div id="setup-state" class="muted center"></div>
-                <button id="setup-continue" class="hidden">ادامه</button>
+                <div id="setup-ask" class="hidden">
+                    <button id="setup-yes"></button>
+                    <button id="setup-no" class="second"></button>
+                    <button id="setup-stop" class="link">توقف</button>
+                </div>
             </div>
             <div class="card">
                 <h2>IP این گوشی</h2>

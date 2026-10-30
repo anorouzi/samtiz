@@ -70,8 +70,11 @@ The installed-app list can be read over the TV's WebSocket API (`ed.installedApp
    host IP, and port 26101 should be open.
 
 **From the remote API (what the Android app does).** Number keys sent over the WebSocket remote
-API open the dialog only on the Apps screen opened from the Home bar (not on the screen reached in
-other ways, where even the real remote's 1 2 3 4 5 does nothing). In the dialog:
+API open the dialog only on the Apps screen opened from the Home bar **with the TV's own remote**.
+On Apps opened by its app id (`ed.apps.launch org.volt.apps`), even the real remote's 1 2 3 4 5 does
+nothing, and opening it with network keys (Home, arrows, OK) didn't work from the phone either. The
+TV gives no sign when the dialog opens, and `developerIP` keeps the old value until the restart, so
+the steps can't be checked from outside. In the dialog:
 
 - `KEY_DOWN` goes to the first Host PC IP box, then `KEY_RIGHT` ×4 makes sure it's the first one.
 - The boxes take number keys. **`KEY_LEFT` moves to the next box** and `KEY_RIGHT` back; going back
