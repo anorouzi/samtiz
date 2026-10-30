@@ -11,6 +11,8 @@
         { id: 'PLAYER_DISPLAY_MODE_FULL_SCREEN', label: 'تمام صفحه (کشیده)' },
         { id: 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO', label: 'خودکار' }
     ];
+    // Parts switched on in js/settings.js (written by the installers); all of them if it lists none.
+    var MODULES = window.PARDEH_MODULES && window.PARDEH_MODULES.length ? window.PARDEH_MODULES : ['aparat', 'gapfilm', 'live', 'link', 'phone', 'usb'];
     var APARAT_CHIPS = ['ورزشی', 'کارتون', 'فیلم', 'سریال', 'مستند', 'موسیقی', 'آشپزی', 'طنز', 'خبر'];
     var TOP = ['search', 'btn-live', 'btn-link', 'btn-phone', 'btn-usb'];   // the site tabs go in front at startup
     var GAP = 'https://core.gapfilm.ir/api/';
@@ -52,6 +54,8 @@
         },
         set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* no storage */ } }
     };
+
+    function has(module) { return MODULES.indexOf(module) !== -1; }
 
     function show(id) { $(id).classList.remove('hidden'); }
     function hide(id) { $(id).classList.add('hidden'); }
@@ -241,7 +245,8 @@
                     if (i.type !== 'Video') { return; }
                     var v = i.attributes;
                     items.push({ uid: v.uid, title: v.title, poster: v.small_poster || v.medium_poster || '',
-                        badge: fmtTime(+v.duration || 0), meta: (v.sender_name || v.username || '') + ' · ' + (v.visit_cnt || 0) + ' بازدید' });
+                        badge: fmtTime(+v.duration || 0), meta: (v.sender_name || v.username || '') + ' · ' + (v.visit_cnt || 0) + ' بازدید',
+                        added: -(+v.sdate_timediff || 0), pop: +v.visit_cnt_int || 0, length: +v.duration || 0 });
                 });
                 ok(items, !!url);
             }, fail);
@@ -392,27 +397,33 @@
     // of opening an item. Sites that need an account get a login chip (phone number + SMS code).
     // Only sites that work on the TV by itself belong here: Tamashakhoneh and Movieland were left
     // out because this TV can't reach them without the hub (docs/REPORT.md, section 10).
-    var SITES = [
+    // Tools are action chips after the categories (e.g. Gapfilm's genres).
+    var ALL_SITES = [
         { id: 'aparat', name: 'آپارات', search: searchAparat,
             chips: APARAT_CHIPS.map(function (c) { return { label: c, open: function () { searchAparat(c); } }; }) },
         { id: 'gapfilm', name: 'گپ فیلم', loadChips: gapChips, search: gapSearch, open: gapOpen,
+            tools: [{ label: 'ژانرها', action: gapGenres }],
             login: { request: gapLoginRequest, confirm: gapLoginConfirm } }
     ];
+    var SITES = ALL_SITES.filter(function (s) { return has(s.id); });
+    if (!SITES.length) { SITES = [ALL_SITES[0]]; }
 
     function siteById(id) {
         for (var i = 0; i < SITES.length; i++) { if (SITES[i].id === id) { return SITES[i]; } }
         return SITES[0];
     }
 
-    // As many categories as fit on one line (nine at most, for the number keys), then the account chip.
+    // As many categories as fit on one line (nine at most, for the number keys), then the site's
+    // tools and the account chip.
     function renderChips() {
         var s = site, acc = accounts[s.id], row = $('chips'), n = Math.min((s.chips || []).length, 9), last;
+        var extra = (s.tools || []).slice();
+        if (s.login) {
+            extra.push(acc ? { label: 'حساب ' + acc.phone, action: function () { accountMenu(s); } }
+                : { label: 'ورود با موبایل', action: function () { openLogin(s); } });
+        }
         do {
-            chips = (s.chips || []).slice(0, n);
-            if (s.login) {
-                chips.push(acc ? { label: 'حساب ' + acc.phone, action: function () { accountMenu(s); } }
-                    : { label: 'ورود با موبایل', action: function () { openLogin(s); } });
-            }
+            chips = (s.chips || []).slice(0, n).concat(extra);
             row.innerHTML = chips.map(function (c, i) {
                 return '<div class="chip' + (c.action ? ' account' : '') + '" id="chip-' + i + '">' +
                     (c.action ? '' : '<span class="num">' + (i + 1) + '</span>') + esc(c.label) + '</div>';
@@ -485,7 +496,8 @@
     function gapItem(c) {
         var id = c.ContentId || c.ContentID, genre = '';
         (c.Properties || []).forEach(function (p) { if (p.Name === 'ژانر') { genre = p.Value; } });
-        return { site: 'gapfilm', id: id, title: c.Title, poster: GAP_IMG + id + '/landscape.jpg', meta: genre || c.EnglishTitle || '' };
+        return { site: 'gapfilm', id: id, title: c.Title, poster: GAP_IMG + id + '/landscape.jpg', meta: genre || c.EnglishTitle || '',
+            added: c.CreateDate || c.UpdateDate || 0, pop: c.LikeCount || 0 };
     }
 
     function gapItems(list) {
@@ -523,6 +535,72 @@
                 ok(gapItems(d.Contents), page < (d.TotalPage || 0));
             }, fail);
         });
+    }
+
+    // Genres are Gapfilm categories under "فیلم" (6) and "سریال" (7); first pick one of the two.
+    var gapCategories = null;
+
+    function gapGenres() {
+        var pick = function (parent, name) {
+            var list = gapCategories.filter(function (c) { return c.ParentID === parent; });
+            openMenu(list.map(function (c) {
+                return { label: c.Title.trim(), action: function () { gapGenre(c.CategoryID, name + ' · ' + c.Title.trim()); } };
+            }).concat([{ label: 'بستن', action: noop }]), 0, 'ژانرهای ' + name);
+        };
+        var choose = function () {
+            openMenu([
+                { label: 'فیلم', action: function () { pick(6, 'فیلم'); } },
+                { label: 'سریال', action: function () { pick(7, 'سریال'); } },
+                { label: 'بستن', action: noop }
+            ], 0, 'ژانرها');
+        };
+        if (gapCategories) { return choose(); }
+        gapCall('v1.0/GetCategoryList', { request: { requestId: -1 } }, function (d) {
+            gapCategories = (d.Result && d.Result.GetCategoryList) || [];
+            choose();
+        }, toast);
+    }
+
+    function gapGenre(id, title) {
+        activeChip = -1;
+        showList(title, function (page, ok, fail) {
+            gapCall('v1.0/GetContentList', { request: { RequestType: 2, RequestId: id, PageIndex: page - 1, PageSize: 24 } }, function (d) {
+                var r = d.Result || {};
+                ok(gapItems(r.GetContentList), page < (r.TotalPages || 0));
+            }, fail);
+        });
+        zone = 'grid';
+    }
+
+    // Cast and crew of a title (where Gapfilm lists them); picking one shows their other titles.
+    function gapCast(v) {
+        toast('در حال دریافت بازیگران «' + v.title + '» ...');
+        gapCall('v1.1/Person/GetPersonByContentId?contentId=' + v.id, null, function (d) {
+            var ROLE = { 5: 'بازیگر', 6: 'کارگردان', 1: 'نویسنده' }, people = [], byId = {};
+            (d.Result || []).forEach(function (p) {
+                if (p.ParentId) { return; }   // dubbing voices hang under the actor they dub
+                var role = ROLE[p.PersonRoleId] || p.PersonRoleName || '';
+                if (byId[p.Id]) { byId[p.Id].roles.push(role); return; }
+                byId[p.Id] = { id: p.Id, name: p.PersianName || p.EnglishName, roles: [role] };
+                people.push(byId[p.Id]);
+            });
+            if (!people.length) { return toast('گپ فیلم بازیگران «' + v.title + '» را ثبت نکرده است'); }
+            openMenu(people.slice(0, 12).map(function (p) {
+                return { label: p.name + ' — ' + p.roles.join('، '), action: function () { gapPerson(p); } };
+            }).concat([{ label: 'بستن', action: noop }]), 0, 'بازیگران و عوامل «' + v.title + '»');
+        }, toast);
+    }
+
+    function gapPerson(p) {
+        showList(p.name, function (page, ok, fail) {
+            gapCall('v1/GetPerson?OrderBy=createdate&Order=desc&PageSize=24&Id=' + p.id + '&PageIndex=' + (page - 1), null, function (d) {
+                var r = d.Result || {};
+                ok(gapItems((r.Contents || []).map(function (c) {
+                    return { ContentId: c.Id, Title: c.Title, CreateDate: c.CreateDate, LikeCount: c.LikeCount };
+                })), page < (r.TotalPages || 0));
+            }, fail);
+        }, { unit: 'عنوان', parent: saveList() });
+        zone = 'grid';
     }
 
     // A film plays straight away; a series opens as a list of its episodes (one page per season).
@@ -807,10 +885,11 @@
         startPlayback(v.title, [{ label: 'USB', url: v.uri, alt: v.path, local: true }], 0, { id: 'f:' + v.path });
     }
 
-    // Options for a USB file: OK on an unfinished download, Tools, or holding OK.
+    // Options for an item: Tools, or holding OK (for USB files also OK on an unfinished download).
     function openItemMenu(i) {
         var v = videos[i];
-        if (!v || !v.local) { return; }
+        if (!v || v.live) { return; }
+        if (!v.local) { return openSiteItemMenu(i); }
         var items = [];
         if (v.partial) { items.push({ label: '↓ ادامهٔ دانلود', action: function () { resumeDownload(v); } }); }
         if (v.legacy) { items.push({ label: '↓ دانلود دوباره از اول', action: function () { restartDownload(v); } }); }
@@ -818,6 +897,43 @@
         items.push({ label: v.virtual ? '× لغو دانلود' : '× حذف از USB', action: function () { confirmDelete(v); } });
         items.push({ label: 'بستن', action: noop });
         openMenu(items, 0);
+    }
+
+    function openSiteItemMenu(i) {
+        var v = videos[i], items = [{ label: v.series ? 'باز کردن' : 'پخش', action: function () { playItem(i); } }];
+        if (v.site === 'gapfilm') { items.push({ label: 'بازیگران و عوامل', action: function () { gapCast(v); } }); }
+        items.push({ label: 'مرتب‌سازی فهرست...', action: openSortMenu });
+        items.push({ label: 'بستن', action: noop });
+        openMenu(items, 0, v.title);
+    }
+
+    // Sorts what's loaded of the current list (the sites can't sort on their side); later pages
+    // are added at the end as before.
+    var SORTS = [
+        { key: 'added', label: 'جدیدترین', compare: function (a, b) { return (b.added || 0) - (a.added || 0); } },
+        { key: 'pop', label: 'پربازدیدترین / محبوب‌ترین', compare: function (a, b) { return (b.pop || 0) - (a.pop || 0); } },
+        { key: 'length', label: 'کوتاه‌ترین', compare: function (a, b) { return (a.length || 0) - (b.length || 0); } },
+        { key: 'title', label: 'الفبایی', compare: function (a, b) { return String(a.title).localeCompare(String(b.title)); } }
+    ];
+
+    function openSortMenu() {
+        var usable = SORTS.filter(function (s) {
+            return s.key === 'title' || videos.some(function (v) { return v[s.key]; });
+        });
+        openMenu(usable.map(function (s) { return { label: s.label, action: function () { sortList(s); } }; })
+            .concat([{ label: 'بستن', action: noop }]), 0, 'مرتب‌سازی ' + videos.length + ' مورد');
+    }
+
+    function sortList(s) {
+        var items = videos.slice().sort(s.compare), status = $('status').textContent.replace(/ · مرتب: .*$/, '');
+        if (focusedEl && focusedEl.className.indexOf('card') !== -1) { focusedEl = null; }
+        $('grid').innerHTML = '<div id="grid-inner"></div>';
+        videos = []; gridIndex = 0;
+        items.forEach(function (v) { v.thumbDone = false; });
+        addItems(items);
+        setStatus(status + ' · مرتب: ' + s.label);
+        zone = 'grid';
+        render();
     }
 
     function confirmDelete(v) {
@@ -1287,12 +1403,14 @@
 
     function toggleSave() {
         if (job) { return stopJob(); }
+        if (!has('usb')) { return; }
         if (screen !== 'player') { return toast('اول ویدیو را پخش کنید، بعد ● را بزنید'); }
         startSave();
     }
 
     // ---------- links sent straight to the TV ----------
     function handleAppControl() {
+        if (!has('link')) { return; }
         try {
             var req = tizen.application.getCurrentApplication().getRequestedAppControl();
             if (!req) { return; }
@@ -1361,7 +1479,7 @@
             if (msg.type === 'key' && msg.code) {
                 return onKey({ keyCode: +msg.code, preventDefault: noop, fake: true });
             }
-            if (msg.type === 'play' && msg.url) {
+            if (msg.type === 'play' && msg.url && has('phone')) {
                 if (screen === 'link') { closeLinkDialog(); }
                 if (screen === 'phone') { closePhoneDialog(); }
                 if (screen === 'login') { closeLogin(); }
@@ -1651,10 +1769,13 @@
     }
 
     function renderMenu() {
-        $('menu').innerHTML = (menu.title ? '<div class="m-title" dir="auto">' + esc(menu.title) + '</div>' : '') +
+        var m = $('menu');
+        m.innerHTML = (menu.title ? '<div class="m-title" dir="auto">' + esc(menu.title) + '</div>' : '') +
             menu.items.map(function (it, i) {
                 return '<div class="m-item' + (i === menu.index ? ' sel' : '') + '">' + esc(it.label) + '</div>';
             }).join('');
+        // Centered menus (browse screens) are centered vertically too, so long ones still fit.
+        m.style.top = m.className === 'center' ? Math.max(20, Math.round((1080 - m.offsetHeight) / 2)) + 'px' : '';
     }
 
     function closeMenu(pick) {
@@ -1690,7 +1811,7 @@
         var items = [], q = player.qualities[player.qIndex];
         if (job) {
             items.push({ label: '■ توقف ' + (job.kind === 'download' ? 'دانلود' : 'ضبط') + ' (' + jobProgress(job) + ')', action: stopJob });
-        } else if (q && !q.local) {
+        } else if (q && !q.local && has('usb')) {
             items.push({ label: q.stream && player.live ? '● ضبط در USB' : '↓ دانلود در USB', action: startSave });
         }
         items.push({ label: 'نمایش: ' + DISPLAY_MODES[displayMode].label, action: cycleDisplayMode });
@@ -1818,11 +1939,11 @@
         else if (id === 'btn-usb') { showUsb(); }
     }
 
-    // OK on a USB file plays it; holding OK opens its options (delete, …).
+    // OK plays (or opens) an item; holding OK opens its options (cast, sorting; delete for USB files).
     function onGridEnter(e) {
         var v = videos[gridIndex], idx = gridIndex;
         if (!v) { return; }
-        if (!v.local) { return playItem(idx); }
+        if (v.live) { return playItem(idx); }
         if (v.partial) { return openItemMenu(idx); }
         if (e.fake) { return playItem(idx); }
         enterHold = setTimeout(function () { enterHold = null; openItemMenu(idx); }, 600);
@@ -1967,10 +2088,10 @@
         if (menu) { return onMenuKey(k); }
 
         // Buttons that work the same everywhere (a running download/recording continues).
-        if (k === KEY.RED) { if (screen === 'player') { closePlayer(); } topIndex = TOP.indexOf('btn-live'); showLive(); return render(); }
+        if (k === KEY.RED && has('live')) { if (screen === 'player') { closePlayer(); } topIndex = TOP.indexOf('btn-live'); showLive(); return render(); }
         if (k === KEY.GREEN || k === KEY.SEARCH) { return openSearch(); }
-        if (k === KEY.YELLOW) { if (screen === 'player') { closePlayer(); } topIndex = TOP.indexOf('btn-usb'); showUsb(); return render(); }
-        if (k === KEY.BLUE) { return openLinkDialog(); }
+        if (k === KEY.YELLOW && has('usb')) { if (screen === 'player') { closePlayer(); } topIndex = TOP.indexOf('btn-usb'); showUsb(); return render(); }
+        if (k === KEY.BLUE && has('link')) { return openLinkDialog(); }
 
         if (screen === 'player') { onPlayerKey(k); } else if (k === KEY.RECORD) { toggleSave(); } else { onBrowseKey(k, e); }
     }
@@ -2000,6 +2121,10 @@
 
     function init() {
         registerKeys();
+        Array.prototype.forEach.call(document.querySelectorAll('[data-module]'), function (el) {
+            if (!has(el.getAttribute('data-module'))) { el.classList.add('hidden'); }
+        });
+        TOP = TOP.filter(function (id) { return !$(id).classList.contains('hidden'); });
         $('search').insertAdjacentHTML('beforebegin', SITES.map(function (s, i) {
             return '<div id="site-' + i + '" class="btn tab">' + s.name + '</div>';
         }).join(''));
@@ -2015,9 +2140,9 @@
         handleAppControl();
         window.addEventListener('appcontrol', handleAppControl);
         findUsb(function () {
-            testUsbWrite();
+            if (has('usb')) { testUsbWrite(); }
             findHub();
-            reattachDownloads();
+            if (has('usb')) { reattachDownloads(); }
         });
 
         switchSite(SITES.indexOf(siteById(store.get('site', 'aparat'))));

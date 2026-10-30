@@ -130,11 +130,20 @@ function startSignin() {
 }
 
 // ---------- installing ----------
-async function install() {
+// Parts of Pardeh that can be left out; the choice goes into js/settings.js in the package.
+const MODULES = ['aparat', 'gapfilm', 'live', 'link', 'phone', 'usb'];
+
+function withModules(files, modules) {
+    const list = MODULES.filter((m) => modules.includes(m));
+    const settings = `/* Written by the installer: the parts of Pardeh switched on. */\nvar PARDEH_MODULES = ${JSON.stringify(list)};\n`;
+    return files.map((f) => (f.name === 'js/settings.js' ? { name: f.name, data: Buffer.from(settings) } : f));
+}
+
+async function install(modules) {
     const tv = job.tv;
     const cert = JSON.parse(fs.readFileSync(certFile(tv.duid), 'utf8'));
-    log('ساختن و امضای بستهٔ پرده...');
-    const wgt = signPackage(appFiles(APP_DIR), cert.author, cert.distributor);
+    log(`ساختن و امضای بستهٔ پرده (${modules.join('، ')})...`);
+    const wgt = signPackage(withModules(appFiles(APP_DIR), modules), cert.author, cert.distributor);
     const running = await fetch(`http://${tv.ip}:8001/api/v2/applications/${APP_ID}`, { signal: AbortSignal.timeout(4000) })
         .then((r) => r.json()).then((a) => a.running === true).catch(() => false);
     // Installing over a running app can leave the TV needing a full restart (error 118).
@@ -199,7 +208,9 @@ export async function handleInstall(req, res, pathname) {
         if (pathname === '/install/run') {
             if (!job.tv || !hasCert(job.tv.duid)) throw new Error('اول به تلویزیون وصل شوید و گواهی بگیرید');
             if (!appFound()) throw new Error(`پوشهٔ app کنار هاب پیدا نشد (${APP_DIR}) — هاب را از داخل پوشهٔ پروژه اجرا کنید`);
-            run(install, 'نصب').catch(() => {});   // progress shows up in the log
+            const modules = Array.isArray(args.modules) ? MODULES.filter((m) => args.modules.includes(m)) : MODULES;
+            if (!modules.includes('aparat') && !modules.includes('gapfilm')) throw new Error('دست‌کم یکی از آپارات یا گپ فیلم را انتخاب کنید');
+            run(() => install(modules), 'نصب').catch(() => {});   // progress shows up in the log
             return json(res, 202, { ok: true });
         }
         return json(res, 404, { error: 'not found' });

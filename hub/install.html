@@ -25,6 +25,8 @@
     .tv .s { font-size: 13px; }
     .ok { color: var(--ok); } .bad { color: var(--accent); } .warn { color: var(--warn); }
     .note { color: var(--muted); font-size: 13px; }
+    #modules label { display: block; font-size: 15px; padding: 6px 0; }
+    #modules input { width: auto; margin: 0 0 0 8px; transform: scale(1.3); }
     #log { background: #000; border-radius: 10px; padding: 10px 12px; font-size: 13px; min-height: 40px; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
 </style>
 </head>
@@ -60,7 +62,16 @@
     </div>
 
     <div class="step" id="s4">
-        <h2><span class="n">۴</span>نصب</h2>
+        <h2><span class="n">۴</span>بخش‌ها و نصب</h2>
+        <div class="note">بخش‌هایی را که روی این تلویزیون می‌خواهید انتخاب کنید:</div>
+        <div id="modules">
+            <label><input type="checkbox" value="aparat" checked> آپارات</label>
+            <label><input type="checkbox" value="gapfilm" checked> گپ فیلم (ژانرها، بازیگران، ورود با موبایل)</label>
+            <label><input type="checkbox" value="live" checked> پخش زنده (تلوبیون — به هاب نیاز دارد)</label>
+            <label><input type="checkbox" value="link" checked> باز کردن لینک</label>
+            <label><input type="checkbox" value="phone" checked> ارسال لینک از گوشی (به هاب نیاز دارد)</label>
+            <label><input type="checkbox" value="usb" checked> فایل‌های USB و ذخیره روی USB</label>
+        </div>
         <button id="install" disabled>⬇ نصب پرده روی تلویزیون</button>
     </div>
 
@@ -135,8 +146,10 @@
     };
 
     $('install').onclick = function () {
+        var modules = Array.prototype.filter.call($('modules').querySelectorAll('input'), function (c) { return c.checked; })
+            .map(function (c) { return c.value; });
         $('install').disabled = true;
-        post('/install/run').then(refresh).catch(function (e) { say(e.message); });
+        post('/install/run', { modules: modules }).then(refresh).catch(function (e) { say(e.message); refresh(); });
     };
 
     refresh();

@@ -13,22 +13,22 @@
         <div id="topbar">
             <div class="logo"><span class="logo-mark">▶</span> پرده</div>
             <input id="search" type="text" placeholder="جستجو در آپارات..." dir="auto">
-            <div id="btn-live" class="btn">زنده</div>
-            <div id="btn-link" class="btn">لینک</div>
-            <div id="btn-phone" class="btn">گوشی</div>
-            <div id="btn-usb" class="btn">USB</div>
+            <div id="btn-live" class="btn" data-module="live">زنده</div>
+            <div id="btn-link" class="btn" data-module="link">لینک</div>
+            <div id="btn-phone" class="btn" data-module="phone">گوشی</div>
+            <div id="btn-usb" class="btn" data-module="usb">USB</div>
         </div>
         <div id="chips"></div>
         <div id="status"></div>
         <div id="grid"></div>
         <div id="legend">
-            <span class="key red">A</span>زنده
+            <span data-module="live"><span class="key red">A</span>زنده</span>
             <span class="key green">B</span>جستجو
-            <span class="key yellow">C</span>USB
-            <span class="key blue">D</span>لینک
+            <span data-module="usb"><span class="key yellow">C</span>USB</span>
+            <span data-module="link"><span class="key blue">D</span>لینک</span>
             <span class="key dark">1-9</span>دسته‌ها
             <span class="key dark">CH</span>صفحه بعد/قبل
-            <span class="key dark rec">●</span>ذخیره در USB
+            <span data-module="usb"><span class="key dark rec">●</span>ذخیره در USB</span>
             <span class="key dark">Info</span>راهنما
         </div>
     </div>
@@ -108,7 +108,7 @@
                     <div class="row"><b>CH ▲▼</b>ویدیو یا شبکهٔ قبلی/بعدی</div>
                     <div class="row"><b>▲</b>انتخاب کیفیت</div>
                     <div class="row"><b>▼ / Tools</b>منو: ذخیره، نمایش، بعدی</div>
-                    <div class="row"><b class="rec">●</b>ذخیره در USB — دوباره: توقف</div>
+                    <div class="row" data-module="usb"><b class="rec">●</b>ذخیره در USB — دوباره: توقف</div>
                     <div class="row"><b>■</b>توقف پخش · <b class="in">Back</b>برگشت</div>
                 </div>
                 <div class="help-col">
@@ -116,15 +116,16 @@
                     <div class="row"><b>جهت‌ها / OK</b>حرکت و انتخاب</div>
                     <div class="row"><b>▲</b>بالای صفحه: سایت‌ها — آپارات، گپ فیلم</div>
                     <div class="row"><b>OK</b>روی سریال: فهرست قسمت‌ها · <b class="in">Back</b>برگشت</div>
-                    <div class="row"><b>ورود</b>گپ فیلم: موبایل و کد پیامکی</div>
+                    <div class="row" data-module="gapfilm"><b>ورود</b>گپ فیلم: موبایل و کد پیامکی</div>
+                    <div class="row"><b>نگه‌داشتن OK / Tools</b>گزینه‌ها: بازیگران، مرتب‌سازی فهرست</div>
                     <div class="row"><b>1 تا 9</b>دسته‌ها · <b class="in">0</b>جستجو</div>
                     <div class="row"><b>CH ▲▼</b>صفحهٔ بعد/قبل</div>
-                    <div class="row"><b class="k red">A</b>پخش زنده <b class="k green">B</b>جستجو</div>
-                    <div class="row"><b class="k yellow">C</b>فایل‌های USB <b class="k blue">D</b>باز کردن لینک</div>
+                    <div class="row"><span data-module="live"><b class="k red">A</b>پخش زنده </span><b class="k green">B</b>جستجو</div>
+                    <div class="row"><span data-module="usb"><b class="k yellow">C</b>فایل‌های USB </span><span data-module="link"><b class="k blue">D</b>باز کردن لینک</span></div>
                     <div class="row"><b>Back</b>برگشت — دو بار: خروج</div>
-                    <div class="help-head">فایل‌های USB</div>
-                    <div class="row"><b>OK</b>پخش · فایل ناقص: ادامهٔ دانلود</div>
-                    <div class="row"><b>نگه‌داشتن OK / Tools</b>گزینه‌ها و حذف</div>
+                    <div class="help-head" data-module="usb">فایل‌های USB</div>
+                    <div class="row" data-module="usb"><b>OK</b>پخش · فایل ناقص: ادامهٔ دانلود</div>
+                    <div class="row" data-module="usb"><b>نگه‌داشتن OK / Tools</b>گزینه‌ها و حذف</div>
                 </div>
             </div>
             <div class="help-foot">برای بستن هر دکمه‌ای را بزنید</div>
@@ -132,6 +133,7 @@
     </div>
 
     <script src="js/lib/qrcode.js"></script>
+    <script src="js/settings.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

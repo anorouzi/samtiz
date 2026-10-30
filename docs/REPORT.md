@@ -176,6 +176,16 @@ engine doesn't support ES6. Persian UI, 1920×1080, remote-only navigation.
   A series opens as a list of its episodes, and Back returns to the list it came from. Gapfilm has a
   «ورود با موبایل» chip: you type the phone number with the remote, then the SMS code. Only sites
   that work on the TV without the hub get a tab; the other sites checked are in section 10.
+- **Browsing by genre and by actor (Gapfilm):** a «ژانرها» chip lists the film and series genres
+  (`GetCategoryList`, then `GetContentList` per genre). Holding OK (or Tools) on a title opens its
+  options: «بازیگران و عوامل» lists the cast and crew (`Person/GetPersonByContentId`), and picking
+  one lists their titles (`GetPerson`).
+- **Sorting:** the same options menu sorts the loaded list: newest, most viewed/liked, shortest, or
+  alphabetical. The sites ignore sort parameters, so it works on what's loaded so far.
+- **Modules:** `js/settings.js` lists the parts that are switched on: `aparat`, `gapfilm`, `live`,
+  `link`, `phone`, `usb`. The installers (the hub's `/install` page and the Android app) write it
+  with the parts chosen there. Parts that are off disappear from the top bar, the legend, the help
+  and the color keys.
 - **Player:** the TV's native AVPlay (hardware decoding).
   - Defaults to Aparat's adaptive HLS ("خودکار"), which starts about 4× faster than a 720p MP4.
     A fixed quality chosen with ▲ is remembered.
