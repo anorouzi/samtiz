@@ -189,10 +189,23 @@ engine doesn't support ES6. Persian UI, 1920×1080, remote-only navigation.
   A series opens as a list of its episodes, and Back returns to the list it came from. Gapfilm has a
   «ورود با موبایل» chip: you type the phone number with the remote, then the SMS code. Only sites
   that work on the TV without the hub get a tab; the other sites checked are in section 10.
-- **Browsing by genre and by actor (Gapfilm):** a «ژانرها» chip lists the film and series genres
-  (`GetCategoryList`, then `GetContentList` per genre). Holding OK (or Tools) on a title opens its
-  options: «بازیگران و عوامل» lists the cast and crew (`Person/GetPersonByContentId`), and picking
-  one lists their titles (`GetPerson`).
+- **Browsing Gapfilm:** all ~27 rows of its home page are categories. The chips that fit are shown,
+  and «همه دسته‌ها» lists every row. Long menus scroll.
+  - «ژانرها» offers «ورزشی», film and series genres (`GetCategoryList`, then `GetContentList`), and
+    Gapfilm's 26 pages by kind (Iranian, Indian, Korean, anime, kids, action…), each with its own
+    rows.
+  - «بازیگران» offers Gapfilm's stars row («ستارگان», 141 people) and the actors of a kind (Iranian,
+    Indian, Korean, Turkish, East Asian, or any genre). Gapfilm has no such list, so Pardeh gathers
+    the cast of up to 60 of that kind's titles (6 requests at a time, 5–10 s) and puts the actors
+    who appear most first: 54 Iranian and 294 Indian actors on the TV. Iranian titles have the
+    thinnest cast data. Picking an actor lists their titles (`GetPerson`).
+  - Search also finds actors by name (the answer's `Persons`), and a person link
+    (`gapfilm.ir/person/1304-…`) sent from the phone opens that actor's titles.
+  - Holding OK (or Tools) on a title opens its options: «بازیگران و عوامل» lists the cast and crew
+    (`Person/GetPersonByContentId`).
+  - **Sport:** Gapfilm has no sport genre (its World Cup and volleyball categories are empty). The
+    «ورزشی» entry gathers its sport rows (home workouts, martial arts), a football search, and
+    Aparat's «ورزشی» category, where the matches and highlights are.
 - **Sorting:** the same options menu sorts the loaded list: newest, most viewed/liked, shortest, or
   alphabetical. The sites ignore sort parameters, so it works on what's loaded so far.
 - **Modules:** `js/settings.js` lists the parts that are switched on: `aparat`, `gapfilm`, `live`,
@@ -376,10 +389,19 @@ through the hub they'd also need it to pass POST bodies and `x-…` headers, and
 `Referer`:
 
 - **Gapfilm** `https://core.gapfilm.ir/api/`, header `SourceChannel: GF_WEBSITE`:
-  - Rows: `v3.3/GetFirstPageByPlatform?PlatformId=1&PlatformType=1&PageType=1&ParentType=2&…`, then
-    `v3.3/GetFirstPageByPlatformPaging?EntityType=1&EntityId=<row>&PageIndex=<0…>`. Pardeh uses rows
-    with no template, `SectionTemplateId` 1 (collection), 10 or 11; banners, actors (14) and
-    "continue watching" (15) are skipped.
+  - Rows: `v3.3/GetFirstPageByPlatform?PlatformId=1&PlatformType=1&PageType=1&ParentType=2&PageSize=100&PageIndex=0`,
+    then `v3.3/GetFirstPageByPlatformPaging?EntityType=1&EntityId=<row>&PageIndex=<0…>`. Pages count
+    from 0. (Until 30 Oct, Pardeh asked for page 1 of 20 and so showed only rows 21–40.) Pardeh uses
+    rows with no template, `SectionTemplateId` 1 (collection), 10 or 11. Banners (6), "continue
+    watching" (15) and «بزودی» are skipped. Template 14 («ستارگان») is the actors row, and its
+    items are people.
+  - The same answer's `PlatformSummaryInfos` lists the pages by kind (`PlatformId` 60 Iranian, 24
+    Indian, 58 Korean, 23 East Asian, 43 anime…). Each page's rows come from the same call with that
+    `PlatformId`.
+  - People: `v1/GetPerson?Id=` (name, photo, titles); search returns matching people in `Persons`.
+    There's no list of people by country.
+  - From outside Iran (the Mac's VPN) the API answers with different rows. `curl --interface en0`
+    goes out on the local route, like the TV.
   - Search: `v1.0/search?Title=`. Title: `v4/Content/GetContent?Id=` (`SeasonList`).
   - Episodes and links: `v4/Content/GetContentAttachments?Id=&seasonId=&generateLink=true`.
     `Files` type 7 = HLS, 9 = MP4s.

@@ -185,8 +185,9 @@
         items.forEach(function (v) {
             var idx = videos.length;
             videos.push(v);
-            html += cardHtml(idx, '<div class="thumb" id="thumb-' + idx + '">' +
-                (v.badge ? '<span class="dur">' + esc(v.badge) + '</span>' : '') + '</div>', v.title, esc(v.meta) || '&nbsp;');
+            var thumb = v.person && !v.poster ? '<div class="thumb text initial">' + esc(String(v.title).charAt(0)) + '</div>'
+                : '<div class="thumb" id="thumb-' + idx + '">' + (v.badge ? '<span class="dur">' + esc(v.badge) + '</span>' : '') + '</div>';
+            html += cardHtml(idx, thumb, v.title, esc(v.meta) || '&nbsp;');
         });
         if ($('grid-inner')) { $('grid-inner').insertAdjacentHTML('beforeend', html); }
     }
@@ -309,6 +310,11 @@
             if (screen === 'player') { closePlayer(); }
             return gapOpen({ site: 'gapfilm', id: +m[1], title: title || '', poster: GAP_IMG + m[1] + '/landscape.jpg' });
         }
+        m = url.match(/gapfilm\.ir\/person\/(\d+)/);   // an actor's page: their titles
+        if (m && has('gapfilm')) {
+            if (screen === 'player') { closePlayer(); }
+            return gapPersonById(+m[1]);
+        }
         if (!/^https?:\/\//.test(url)) { url = 'http://' + url; }
         var name = title || url.split('/').pop().split('?')[0] || url;
         showPlayer(name);
@@ -321,6 +327,10 @@
         var v = videos[i];
         if (!v) { return; }
         gridIndex = i;
+        if (v.person) {
+            if (screen === 'player') { closePlayer(); }
+            return gapPerson(v.person);
+        }
         if (v.series) {
             if (screen === 'player') { closePlayer(); }
             return siteById(v.site).open(v);
@@ -414,7 +424,7 @@
         { id: 'aparat', name: 'آپارات', search: searchAparat,
             chips: APARAT_CHIPS.map(function (c) { return { label: c, open: function () { searchAparat(c); } }; }) },
         { id: 'gapfilm', name: 'گپ فیلم', loadChips: gapChips, search: gapSearch, open: gapOpen,
-            tools: [{ label: 'ژانرها', action: gapGenres }],
+            tools: [{ label: 'همه دسته‌ها', action: gapAllRows }, { label: 'ژانرها', action: gapGenres }, { label: 'بازیگران', action: gapActorsMenu }],
             login: { request: gapLoginRequest, confirm: gapLoginConfirm } }
     ];
     var SITES = ALL_SITES.filter(function (s) { return has(s.id); });
@@ -517,18 +527,61 @@
     }
 
     // The rows of Gapfilm's home page become the categories: plain rows (no template, 10, 11) and
-    // collections (1). Banners, actors (14), "continue watching" (15) and the like are skipped.
+    // collections (1). Banners, "continue watching" (15), "coming soon" and the like are skipped;
+    // the actors row («ستارگان», template 14) is kept for the «بازیگران» chip. Rows are counted
+    // from page 0, and one page of 100 holds all of them (about 60, half of them banners).
     var GAP_ROWS = [null, undefined, 1, 10, 11];
+    var gapStarsRow = null;
+    var gapPlatforms = [];   // Gapfilm's pages by kind: Iranian, Indian, Korean, anime, action…
+    var gapPages = {};       // platform id → its rows, loaded once
+
+    function gapRow(s) {
+        return GAP_ROWS.indexOf(s.SectionTemplateId) !== -1 && s.Total >= 2 && s.Title && !/بزودی/.test(s.Title);
+    }
+
+    function gapPage(pid, ok) {
+        if (gapPages[pid]) { return ok(gapPages[pid]); }
+        gapCall('v3.3/GetFirstPageByPlatform?PlatformId=' + pid + '&PlatformType=1&PageType=1&ParentType=2&ContentRows=1&PageSize=100&PageIndex=0', null, function (d) {
+            var rows = [];
+            ((d.Result && d.Result.Sections) || []).forEach(function (s) {
+                if (gapRow(s)) { rows.push({ id: s.SectionId, title: s.Title.trim() }); }
+            });
+            gapPages[pid] = rows;
+            ok(rows);
+        }, toast);
+    }
+
+    // One kind's page as a menu: its actors first, then its rows.
+    function gapPlatformMenu(p) {
+        gapPage(p.id, function (rows) {
+            if (!rows.length) { return toast('بخش «' + p.name + '» در گپ فیلم خالی است'); }
+            openMenu([{ label: 'بازیگران ' + p.name, action: function () { gapActorsOf(p.name, rows.slice(0, 2).map(function (r) { return r.id; })); } }]
+                .concat(rows.map(function (r) {
+                    return { label: r.title, action: function () { activeChip = -1; gapSection(r.id, r.title); zone = 'grid'; } };
+                })).concat([{ label: 'بستن', action: noop }]), 1, p.name);
+        });
+    }
 
     function gapChips(ok, fail) {
-        gapCall('v3.3/GetFirstPageByPlatform?PlatformId=1&PlatformType=1&PageType=1&ParentType=2&ContentRows=1&PageSize=20&PageIndex=1', null, function (d) {
+        gapCall('v3.3/GetFirstPageByPlatform?PlatformId=1&PlatformType=1&PageType=1&ParentType=2&ContentRows=1&PageSize=100&PageIndex=0', null, function (d) {
             var list = [];
             ((d.Result && d.Result.Sections) || []).forEach(function (s) {
-                if (GAP_ROWS.indexOf(s.SectionTemplateId) === -1 || s.Total < 2 || !s.Title) { return; }
-                list.push({ label: s.Title, open: function () { gapSection(s.SectionId, s.Title); } });
+                if (s.SectionTemplateId === 14 && s.Total) { gapStarsRow = s.SectionId; }
+                if (!gapRow(s)) { return; }
+                var title = s.Title.trim();
+                list.push({ label: title, row: s.SectionId, open: function () { gapSection(s.SectionId, title); } });
             });
+            gapPlatforms = ((d.Result && d.Result.PlatformSummaryInfos) || []).map(function (p) { return { id: p.PlatformId, name: p.Name.trim() }; });
             ok(list);
         }, fail);
+    }
+
+    // Every row, also those that don't fit on the chip row.
+    function gapAllRows() {
+        var all = siteById('gapfilm').chips || [];
+        openMenu(all.map(function (c) {
+            return { label: c.label, action: function () { activeChip = chips.indexOf(c); c.open(); zone = 'grid'; } };
+        }).concat([{ label: 'بستن', action: noop }]), Math.max(0, all.indexOf(chips[activeChip])), 'دسته‌های گپ فیلم');
     }
 
     // Gapfilm counts pages from 0.
@@ -544,7 +597,8 @@
     function gapSearch(query) {
         showList(query, function (page, ok, fail) {
             gapCall('v1.0/search?PageSize=24&Title=' + encodeURIComponent(query) + '&PageIndex=' + (page - 1), null, function (d) {
-                ok(gapItems(d.Contents), page < (d.TotalPage || 0));
+                var people = page === 1 ? (d.Persons || []).map(gapPersonItem) : [];   // actors whose name matches
+                ok(people.concat(gapItems(d.Contents)), page < (d.TotalPage || 0));
             }, fail);
         });
     }
@@ -561,16 +615,33 @@
         };
         var choose = function () {
             openMenu([
-                { label: 'فیلم', action: function () { pick(6, 'فیلم'); } },
-                { label: 'سریال', action: function () { pick(7, 'سریال'); } },
-                { label: 'بستن', action: noop }
-            ], 0, 'ژانرها');
+                { label: 'ورزشی', action: gapSport },
+                { label: 'فیلم بر اساس ژانر', action: function () { pick(6, 'فیلم'); } },
+                { label: 'سریال بر اساس ژانر', action: function () { pick(7, 'سریال'); } }
+            ].concat(gapPlatforms.map(function (p) {
+                return { label: p.name, action: function () { gapPlatformMenu(p); } };
+            })).concat([{ label: 'بستن', action: noop }]), 0, 'ژانرها و کشورها');
         };
         if (gapCategories) { return choose(); }
         gapCall('v1.0/GetCategoryList', { request: { requestId: -1 } }, function (d) {
             gapCategories = (d.Result && d.Result.GetCategoryList) || [];
             choose();
         }, toast);
+    }
+
+    // Gapfilm has no sport genre: its sport is in a few home rows (home workouts, martial arts) and
+    // in search. Aparat's «ورزشی» category has the matches and highlights.
+    function gapSport() {
+        var items = (siteById('gapfilm').chips || []).filter(function (c) { return /ورزش|رزمی|کشتی|فوتبال|بوکس/.test(c.label); })
+            .map(function (c) { return { label: c.label, action: function () { activeChip = chips.indexOf(c); c.open(); zone = 'grid'; } }; });
+        items.push({ label: 'فوتبال (جستجو در گپ فیلم)', action: function () { activeChip = -1; gapSearch('فوتبال'); zone = 'grid'; } });
+        for (var i = 0; i < SITES.length; i++) {
+            if (SITES[i].id === 'aparat') {
+                items.push({ label: 'ورزشی در آپارات (مسابقه‌ها و خلاصه‌ها)', action: (function (j) { return function () { switchSite(j); }; }(i)) });
+            }
+        }
+        items.push({ label: 'بستن', action: noop });
+        openMenu(items, 0, 'ورزشی');
     }
 
     function gapGenre(id, title) {
@@ -600,6 +671,132 @@
             openMenu(people.slice(0, 12).map(function (p) {
                 return { label: p.name + ' — ' + p.roles.join('، '), action: function () { gapPerson(p); } };
             }).concat([{ label: 'بستن', action: noop }]), 0, 'بازیگران و عوامل «' + v.title + '»');
+        }, toast);
+    }
+
+    // A person as a card: their photo, OK lists their titles.
+    function gapPersonItem(p) {
+        var name = p.PersianName || p.EnglishName;
+        return { site: 'gapfilm', person: { id: p.Id, name: name }, title: name, poster: p.AvatarUrl || '', portrait: true,
+            meta: p.EnglishName && p.EnglishName !== name ? p.EnglishName : 'بازیگر' };
+    }
+
+    // «بازیگران»: Gapfilm's stars, the actors of one kind (Iranian, Indian, …), or a name search.
+    var GAP_ACTOR_KINDS = ['ایرانی', 'هندی', 'کره‌ای', 'ترکی', 'شرقی'];
+
+    function gapActorsMenu() {
+        var items = [{ label: 'ستارگان گپ فیلم', action: gapStars }];
+        GAP_ACTOR_KINDS.forEach(function (name) {
+            var p = gapPlatforms.filter(function (x) { return x.name === name; })[0];
+            var row = (siteById('gapfilm').chips || []).filter(function (c) { return c.label === name; })[0];
+            if (p) {
+                items.push({ label: 'بازیگران ' + name, action: function () {
+                    gapPage(p.id, function (rows) { gapActorsOf(name, rows.slice(0, 2).map(function (r) { return r.id; })); });
+                } });
+            } else if (row) {
+                items.push({ label: 'بازیگران ' + name, action: function () { gapActorsOf(name, [row.row]); } });
+            }
+        });
+        items.push({ label: 'بازیگران ژانرهای دیگر...', action: function () {
+            openMenu(gapPlatforms.filter(function (p) { return GAP_ACTOR_KINDS.indexOf(p.name) === -1; }).map(function (p) {
+                return { label: 'بازیگران ' + p.name, action: function () {
+                    gapPage(p.id, function (rows) { gapActorsOf(p.name, rows.slice(0, 2).map(function (r) { return r.id; })); });
+                } };
+            }).concat([{ label: 'بستن', action: noop }]), 0, 'بازیگران بر اساس ژانر');
+        } });
+        items.push({ label: 'جستجوی نام بازیگر', action: openSearch });
+        items.push({ label: 'بستن', action: noop });
+        openMenu(items, 0, 'بازیگران');
+    }
+
+    // Titles of some rows, up to n (two pages of 30 per row).
+    function gapRowTitles(rowIds, n, ok) {
+        var ids = [], steps = [];
+        rowIds.forEach(function (id) { steps.push([id, 0], [id, 1]); });
+        var step = function (i) {
+            if (i >= steps.length || ids.length >= n) { return ok(ids.slice(0, n)); }
+            gapCall('v3.3/GetFirstPageByPlatformPaging?EntityType=1&PageSize=30&EntityId=' + steps[i][0] + '&PageIndex=' + steps[i][1], null, function (d) {
+                var list = (d.Result && d.Result.Contents) || [];
+                list.forEach(function (c) {
+                    var id = c.ContentId || c.ContentID;
+                    if (id && ids.indexOf(id) === -1) { ids.push(id); }
+                });
+                step(i + (steps[i][1] === 0 && list.length < 30 ? 2 : 1));   // a short first page has no second
+            }, function () { step(i + 1); });
+        };
+        step(0);
+    }
+
+    // Gapfilm has no list of actors by kind, so the cast of up to 60 titles of that kind is gathered
+    // (6 requests at a time, a few seconds) and the actors who appear most come first.
+    var gapActorCache = {};
+
+    function gapActorsOf(label, rowIds) {
+        var key = rowIds.join(','), token = listToken;
+        var show = function (people) {
+            activeChip = -1;
+            showList('بازیگران ' + label, function (page, ok) {
+                ok(people.slice((page - 1) * 24, page * 24), page * 24 < people.length);
+            }, { unit: 'بازیگر' });
+            zone = 'grid';
+            render();
+        };
+        if (gapActorCache[key]) { return show(gapActorCache[key]); }
+        setStatus('در حال پیدا کردن بازیگران ' + label + ' ...');
+        gapRowTitles(rowIds, 60, function (ids) {
+            var byId = {}, found = [], next = 0, running = 0, done = 0;
+            var got = function (d) {
+                running--; done++;
+                ((d && d.Result) || []).forEach(function (p) {
+                    if (p.PersonRoleId !== 5 || p.ParentId) { return; }   // actors only, not their dubbing voices
+                    if (!byId[p.Id]) { byId[p.Id] = { p: p, n: 0 }; found.push(byId[p.Id]); }
+                    byId[p.Id].n++;
+                });
+                if (token === listToken) { setStatus('در حال پیدا کردن بازیگران ' + label + ' ... ' + done + ' از ' + ids.length + ' عنوان'); }
+                pump();
+            };
+            var pump = function () {
+                while (running < 6 && next < ids.length) {
+                    running++;
+                    gapCall('v1.1/Person/GetPersonByContentId?contentId=' + ids[next++], null, got, got);
+                }
+                if (running || next < ids.length) { return; }
+                found.sort(function (a, b) { return b.n - a.n || (b.p.AvatarUrl ? 1 : 0) - (a.p.AvatarUrl ? 1 : 0); });
+                var people = found.map(function (x) {
+                    var it = gapPersonItem(x.p);
+                    it.meta = x.n + ' عنوان' + (x.p.EnglishName && x.p.EnglishName !== it.title ? ' · ' + x.p.EnglishName : '');
+                    return it;
+                });
+                gapActorCache[key] = people;
+                hubLog('actors', { label: label, titles: ids.length, actors: people.length });
+                if (token !== listToken) { return; }   // the user moved on meanwhile
+                if (!people.length) { return setStatus('گپ فیلم برای این عنوان‌ها بازیگری ثبت نکرده است'); }
+                show(people);
+            };
+            if (!ids.length) { return setStatus('عنوانی پیدا نشد'); }
+            pump();
+        });
+    }
+
+    // Gapfilm's «ستارگان» row: the actors it has pages for.
+    function gapStars() {
+        if (!gapStarsRow) { return toast('فهرست بازیگران گپ فیلم پیدا نشد — نام بازیگر را جستجو کنید'); }
+        activeChip = -1;
+        showList('بازیگران', function (page, ok, fail) {
+            gapCall('v3.3/GetFirstPageByPlatformPaging?EntityType=1&PageSize=24&EntityId=' + gapStarsRow + '&PageIndex=' + (page - 1), null, function (d) {
+                var r = d.Result || {};
+                ok((r.Contents || []).filter(function (p) { return p.Id; }).map(gapPersonItem), page < (r.TotalPage || 0));
+            }, fail);
+        }, { unit: 'بازیگر' });
+        zone = 'grid';
+    }
+
+    // A person page link (gapfilm.ir/person/<id>-…): the name comes with their first titles.
+    function gapPersonById(id) {
+        toast('در حال باز کردن صفحهٔ بازیگر ...');
+        gapCall('v1/GetPerson?PageSize=1&PageIndex=0&Id=' + id, null, function (d) {
+            var r = d.Result || {};
+            gapPerson({ id: id, name: r.PersianName || r.EnglishName || 'بازیگر' });
         }, toast);
     }
 
@@ -913,8 +1110,8 @@
     }
 
     function openSiteItemMenu(i) {
-        var v = videos[i], items = [{ label: v.series ? 'باز کردن' : 'پخش', action: function () { playItem(i); } }];
-        if (v.site === 'gapfilm') { items.push({ label: 'بازیگران و عوامل', action: function () { gapCast(v); } }); }
+        var v = videos[i], items = [{ label: v.person ? 'فیلم‌ها و سریال‌ها' : v.series ? 'باز کردن' : 'پخش', action: function () { playItem(i); } }];
+        if (v.site === 'gapfilm' && !v.person) { items.push({ label: 'بازیگران و عوامل', action: function () { gapCast(v); } }); }
         items.push({ label: 'مرتب‌سازی فهرست...', action: openSortMenu });
         items.push({ label: 'بستن', action: noop });
         openMenu(items, 0, v.title);
@@ -1808,12 +2005,18 @@
         if (screen === 'player') { showOsd(); }
     }
 
+    // At most MENU_ROWS rows are shown; longer menus scroll with the selection (▲ / ▼ mark more).
+    var MENU_ROWS = 11;
+
     function renderMenu() {
-        var m = $('menu');
+        var m = $('menu'), n = menu.items.length;
+        var from = Math.max(0, Math.min(menu.index - Math.floor(MENU_ROWS / 2), n - MENU_ROWS)), to = Math.min(n, from + MENU_ROWS);
+        var rows = '';
+        for (var i = from; i < to; i++) {
+            rows += '<div class="m-item' + (i === menu.index ? ' sel' : '') + '">' + esc(menu.items[i].label) + '</div>';
+        }
         m.innerHTML = (menu.title ? '<div class="m-title" dir="auto">' + esc(menu.title) + '</div>' : '') +
-            menu.items.map(function (it, i) {
-                return '<div class="m-item' + (i === menu.index ? ' sel' : '') + '">' + esc(it.label) + '</div>';
-            }).join('');
+            (from > 0 ? '<div class="m-more">▲</div>' : '') + rows + (to < n ? '<div class="m-more">▼</div>' : '');
         // Centered menus (browse screens) are centered vertically too, so long ones still fit.
         m.style.top = m.className === 'center' ? Math.max(20, Math.round((1080 - m.offsetHeight) / 2)) + 'px' : '';
     }
@@ -1910,8 +2113,10 @@
         var inner = $('grid-inner');
         if (!inner) { return; }
         // Scroll with a GPU transform instead of changing layout.
-        var card = $('card-' + gridIndex);
-        var y = (zone === 'grid' && card) ? Math.max(0, card.offsetTop - 20) : 0;
+        // Rows are measured from the first card (offsetTop's reference differs between engines); the
+        // grid's top padding leaves room for the enlarged focused card in the first row.
+        var card = $('card-' + gridIndex), first = $('card-0');
+        var y = (zone === 'grid' && card && first) ? Math.max(0, card.offsetTop - first.offsetTop) : 0;
         setTransform(inner, 'translate3d(0,' + (-y) + 'px,0)');
         loadThumbs();
         schedulePrefetch();
@@ -1925,7 +2130,11 @@
             var v = videos[i];
             if (v.poster && !v.thumbDone) {
                 var th = $('thumb-' + i);
-                if (th) { th.style.backgroundImage = "url('" + v.poster.replace(/'/g, '%27') + "')"; v.thumbDone = true; }
+                if (th) {
+                    th.style.backgroundImage = "url('" + v.poster.replace(/'/g, '%27') + "')";
+                    if (v.portrait) { th.style.backgroundPosition = 'center 22%'; }
+                    v.thumbDone = true;
+                }
             }
         }
     }
