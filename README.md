@@ -11,9 +11,11 @@ to build, sign and install it.
 - **USB:** play files from the stick, and save videos to it through the TV's download manager,
   with pause, resume and delete.
 - **Links** from anywhere, including from your phone through the optional **TV Hub** (QR code).
-- **Install on other TVs:** the hub's `/install` page installs Pardeh on any Samsung Tizen TV on
-  the same Wi-Fi, from a computer or an Android phone, without Tizen Studio. See
-  [hub/README.md](hub/README.md).
+- **Android app (Pardeh TV):** finds the TV on the Wi-Fi, walks you through Developer Mode in
+  Persian, installs Pardeh with the parts you choose, and works as a remote. Install
+  [android/dist/Pardeh-TV.apk](android/dist/Pardeh-TV.apk); see [android/README.md](android/README.md).
+- **Install on other TVs from a computer:** the hub's `/install` page does the same from a
+  computer or Termux. See [hub/README.md](hub/README.md).
 
 The full story is in **[docs/REPORT.md](docs/REPORT.md)**: TV discovery, firmware, Developer
 Mode, Tizen Studio on Apple Silicon, Samsung certificates and error 118, the removed apps, and the
@@ -41,7 +43,8 @@ manager quirks), with test results.
 | Folder | Contents |
 |---|---|
 | `app/` | The Tizen web app (ES5, since the 2016 engine has no ES6) |
-| `hub/` | Optional Node helper: phone sending, HTTPS relay, live recording, diagnostics |
+| `hub/` | Optional Node helper: phone sending, HTTPS relay, live recording, diagnostics, `/install` |
+| `android/` | The Pardeh TV Android app (installer + remote); `dist/` has the APK |
 | `tools/` | Deploy script, WebSocket remote, store-app remover, icon generator, yt-dlp fetcher |
 | `certificates/` | How to create the Samsung certificate (the keys are never committed) |
 | `docs/` | Complete report, and [the full Claude Code chat session](docs/chat-session.md) that built all of this (secrets redacted) |

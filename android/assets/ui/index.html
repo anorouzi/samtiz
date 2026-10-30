@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>پرده TV</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="brand"><span class="mark">▶</span> پرده <small>برای تلویزیون سامسونگ</small></div>
+        <div id="tvbadge" class="badge">تلویزیونی انتخاب نشده</div>
+    </header>
+
+    <main>
+        <!-- TV: find and pick the TV, see whether it's ready -->
+        <section id="page-tv" class="page">
+            <div class="card">
+                <h2>تلویزیون شما</h2>
+                <div id="tvcard" class="muted">در حال جستجو...</div>
+                <button id="scan" class="second">🔍 جستجوی دوباره در وای‌فای</button>
+                <div id="tvlist"></div>
+            </div>
+            <div class="card" id="ready-card">
+                <h2>آمادگی برای نصب</h2>
+                <div id="readiness" class="muted">اول تلویزیون را انتخاب کنید.</div>
+            </div>
+            <div class="card">
+                <h2>IP این گوشی</h2>
+                <div class="muted">در تلویزیون، در قسمت <b>Host PC IP</b> همین عدد را بنویسید:</div>
+                <div id="myip" class="bigip">…</div>
+                <button class="second" data-go="help">راهنمای قدم‌به‌قدم</button>
+            </div>
+        </section>
+
+        <!-- Install: Samsung sign-in, parts, install -->
+        <section id="page-install" class="page hidden">
+            <div class="card">
+                <h2><span class="n">۱</span>تلویزیون</h2>
+                <div id="inst-tv" class="muted"></div>
+            </div>
+            <div class="card">
+                <h2><span class="n">۲</span>گواهی سامسونگ (یک بار برای هر تلویزیون)</h2>
+                <div class="muted">تلویزیون فقط برنامه‌ای را نصب می‌کند که با گواهیِ مخصوص خودش امضا شده باشد. با یک حساب سامسونگ (رایگان) وارد شوید تا گواهی ساخته شود.</div>
+                <div id="cert" class="muted"></div>
+                <button id="signin">ورود به حساب سامسونگ</button>
+            </div>
+            <div class="card">
+                <h2><span class="n">۳</span>بخش‌های پرده</h2>
+                <div id="modules">
+                    <label><input type="checkbox" value="aparat" checked> آپارات</label>
+                    <label><input type="checkbox" value="gapfilm" checked> گپ فیلم (ژانرها، بازیگران، ورود با موبایل)</label>
+                    <label><input type="checkbox" value="live" checked> پخش زنده — تلوبیون (به هاب نیاز دارد)</label>
+                    <label><input type="checkbox" value="link" checked> باز کردن لینک</label>
+                    <label><input type="checkbox" value="phone" checked> ارسال لینک از گوشی (به هاب نیاز دارد)</label>
+                    <label><input type="checkbox" value="usb" checked> فایل‌های USB و ذخیره روی USB</label>
+                </div>
+            </div>
+            <div class="card">
+                <h2><span class="n">۴</span>نصب</h2>
+                <button id="install">⬇ نصب پرده روی تلویزیون</button>
+                <div id="log" class="log"></div>
+            </div>
+        </section>
+
+        <!-- Remote control -->
+        <section id="page-remote" class="page hidden">
+            <div id="remote-state" class="muted center">برای کنترل، اول تلویزیون را انتخاب کنید.</div>
+            <div class="remote">
+                <div class="row3">
+                    <button class="key red-k" data-key="KEY_POWER">⏻</button>
+                    <button class="key" data-key="KEY_SOURCE">ورودی</button>
+                    <button class="key" data-key="KEY_HOME">⌂ خانه</button>
+                </div>
+                <div class="pad">
+                    <button class="key up" data-key="KEY_UP">▲</button>
+                    <button class="key left" data-key="KEY_LEFT">◀</button>
+                    <button class="key ok" data-key="KEY_ENTER">OK</button>
+                    <button class="key right" data-key="KEY_RIGHT">▶</button>
+                    <button class="key down" data-key="KEY_DOWN">▼</button>
+                </div>
+                <div class="row3">
+                    <button class="key" data-key="KEY_RETURN">↩ برگشت</button>
+                    <button class="key" data-key="KEY_TOOLS">Tools</button>
+                    <button class="key" data-key="KEY_INFO">Info</button>
+                </div>
+                <div class="row4">
+                    <button class="key" data-key="KEY_VOLDOWN">−🔊</button>
+                    <button class="key" data-key="KEY_MUTE">🔇</button>
+                    <button class="key" data-key="KEY_VOLUP">+🔊</button>
+                    <button class="key" data-key="KEY_CHUP">CH▲</button>
+                </div>
+                <div class="row4">
+                    <button class="key" data-key="KEY_REWIND">⏪</button>
+                    <button class="key" data-key="KEY_PLAY">⏯</button>
+                    <button class="key" data-key="KEY_FF">⏩</button>
+                    <button class="key" data-key="KEY_CHDOWN">CH▼</button>
+                </div>
+                <div class="row4">
+                    <button class="key colour a" data-key="KEY_RED">A</button>
+                    <button class="key colour b" data-key="KEY_GREEN">B</button>
+                    <button class="key colour c" data-key="KEY_YELLOW">C</button>
+                    <button class="key colour d" data-key="KEY_CYAN">D</button>
+                </div>
+                <div class="digits">
+                    <button class="key" data-key="KEY_1">1</button><button class="key" data-key="KEY_2">2</button><button class="key" data-key="KEY_3">3</button>
+                    <button class="key" data-key="KEY_4">4</button><button class="key" data-key="KEY_5">5</button><button class="key" data-key="KEY_6">6</button>
+                    <button class="key" data-key="KEY_7">7</button><button class="key" data-key="KEY_8">8</button><button class="key" data-key="KEY_9">9</button>
+                    <button class="key" data-key="KEY_STOP">■</button><button class="key" data-key="KEY_0">0</button><button class="key" data-key="KEY_REC">●</button>
+                </div>
+                <button id="open-pardeh" class="second">▶ باز کردن پرده روی تلویزیون</button>
+            </div>
+        </section>
+
+        <!-- Help -->
+        <section id="page-help" class="page hidden">
+            <div class="card">
+                <h2>آماده کردن تلویزیون (فقط یک بار)</h2>
+                <ol class="steps">
+                    <li>گوشی و تلویزیون باید به <b>یک وای‌فای</b> وصل باشند. <button class="link" id="wifi">تنظیمات وای‌فای گوشی</button></li>
+                    <li>با ریموت تلویزیون، دکمهٔ خانه را بزنید و بخش <b>Apps</b> (برنامه‌ها) را باز کنید.</li>
+                    <li>وقتی صفحهٔ Apps باز است، روی ریموت پشت سر هم <bdi dir="ltr" class="nowrap"><b>1 2 3 4 5</b></bdi> را بزنید (در ریموت هوشمند: دکمهٔ 123 یا صفحه‌کلید روی صفحه).</li>
+                    <li>پنجرهٔ <b>Developer mode</b> باز می‌شود. آن را روی <b>On</b> بگذارید.</li>
+                    <li>در کادر <b>Host PC IP</b> این عدد را بنویسید: <span id="help-ip" class="ip">…</span></li>
+                    <li><b>OK</b> را بزنید.</li>
+                    <li>تلویزیون را <b>کامل</b> خاموش و روشن کنید: دکمهٔ پاور ریموت را حدود ۵ ثانیه نگه دارید تا تلویزیون دوباره روشن شود. (خاموش کردن معمولی کافی نیست.)</li>
+                    <li>به این برنامه برگردید: در صفحهٔ «تلویزیون» باید <b class="ok">آماده ✓</b> را ببینید.</li>
+                </ol>
+            </div>
+            <div class="card">
+                <h2>اگر کار نکرد</h2>
+                <ul class="steps">
+                    <li><b>تلویزیون پیدا نمی‌شود:</b> تلویزیون روشن باشد و به همان وای‌فای وصل باشد. «جستجوی دوباره» را بزنید.</li>
+                    <li><b>IP عوض شده:</b> اگر IP گوشی عوض شود (مثلاً بعد از خاموش و روشن شدن مودم)، مراحل ۲ تا ۷ را با IP جدید تکرار کنید.</li>
+                    <li><b>کنترل کار نمی‌کند:</b> بار اول تلویزیون می‌پرسد «اجازه می‌دهید؟» — روی تلویزیون <b>Allow</b> را بزنید.</li>
+                    <li><b>خطای 118 هنگام نصب:</b> پرده را روی تلویزیون ببندید، تلویزیون را کامل خاموش و روشن کنید و دوباره نصب کنید.</li>
+                    <li><b>ورود به سامسونگ:</b> حساب سامسونگ رایگان است؛ با همان صفحه‌ای که باز می‌شود می‌توانید حساب بسازید.</li>
+                </ul>
+            </div>
+            <div class="muted center" id="version"></div>
+        </section>
+    </main>
+
+    <nav>
+        <button data-go="tv" class="on">📺<span>تلویزیون</span></button>
+        <button data-go="install">⬇<span>نصب</span></button>
+        <button data-go="remote">🎮<span>کنترل</span></button>
+        <button data-go="help">❓<span>راهنما</span></button>
+    </nav>
+    <div id="toast" class="hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
