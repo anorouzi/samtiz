@@ -297,6 +297,12 @@
         player.listIndex = -1;
         var m = url.match(/aparat\.com\/v\/([A-Za-z0-9]+)/);
         if (m) { return playAparat(m[1], title || ''); }
+        // A Gapfilm page (gapfilm.ir/movie/<id>-… or /serial/<id>-…): a film plays, a series opens its episodes.
+        m = url.match(/gapfilm\.ir\/(?:movie|serial)\/(\d+)/);
+        if (m && has('gapfilm')) {
+            if (screen === 'player') { closePlayer(); }
+            return gapOpen({ site: 'gapfilm', id: +m[1], title: title || '', poster: GAP_IMG + m[1] + '/landscape.jpg' });
+        }
         if (!/^https?:\/\//.test(url)) { url = 'http://' + url; }
         var name = title || url.split('/').pop().split('?')[0] || url;
         showPlayer(name);
@@ -606,9 +612,10 @@
     // A film plays straight away; a series opens as a list of its episodes (one page per season).
     function gapOpen(v) {
         if (v.att) { return gapPlay(v); }
-        toast('در حال باز کردن «' + v.title + '» ...');
+        toast('در حال باز کردن «' + (v.title || 'گپ فیلم') + '» ...');
         gapCall('v4/Content/GetContent?Id=' + v.id, null, function (d) {
             var seasons = (d.Result && d.Result.SeasonList) || [];
+            if (!v.title) { v.title = (d.Result && d.Result.Title) || 'گپ فیلم'; }   // opened from a link
             if (!seasons.length) { return toast('ویدیویی برای «' + v.title + '» پیدا نشد'); }
             var film = seasons.length === 1 && seasons[0].NumberOfEpisodes <= 1;
             var fetch = function (page, ok, fail) {
@@ -1409,15 +1416,17 @@
     }
 
     // ---------- links sent straight to the TV ----------
+    // Links handed over when Pardeh is launched by another app or by the phone app (the TV's
+    // "ed.apps.launch" puts the link in the launch data, often inside JSON such as "PAYLOAD").
     function handleAppControl() {
-        if (!has('link')) { return; }
+        if (!has('link') && !has('phone')) { return; }
         try {
             var req = tizen.application.getCurrentApplication().getRequestedAppControl();
             if (!req) { return; }
             var found = null;
             (req.appControl.data || []).forEach(function (d) {
                 d.value.forEach(function (v) {
-                    var m = !found && String(v).match(/https?:\/\/[^\s"'\\]+/);
+                    var m = !found && String(v).replace(/\\\//g, '/').match(/https?:\/\/[^\s"'\\]+/);
                     if (m) { found = m[0]; }
                 });
             });

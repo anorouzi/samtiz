@@ -63,6 +63,26 @@
             </div>
         </section>
 
+        <!-- Send a link: it opens in Pardeh on the TV and plays -->
+        <section id="page-link" class="page hidden">
+            <div class="card">
+                <h2>پخش لینک روی تلویزیون</h2>
+                <div class="muted">لینک آپارات، گپ فیلم یا لینک مستقیم ویدیو (mp4 / m3u8) را بچسبانید. پرده روی تلویزیون باز می‌شود و پخش می‌کند.</div>
+                <textarea id="url" dir="ltr" placeholder="https://www.aparat.com/v/..." autocomplete="off"></textarea>
+                <button id="paste" class="second">📋 چسباندن از کلیپ‌بورد</button>
+                <button id="send">▶ پخش روی تلویزیون</button>
+                <div id="send-state" class="muted"></div>
+            </div>
+            <div class="card">
+                <h2>راه سریع‌تر: «اشتراک‌گذاری»</h2>
+                <div class="muted">در آپارات، مرورگر، تلگرام یا هر برنامهٔ دیگری روی «اشتراک‌گذاری / Share» بزنید و <b>پرده TV</b> را انتخاب کنید؛ ویدیو مستقیم روی تلویزیون پخش می‌شود.</div>
+            </div>
+            <div class="card">
+                <h2>ارسال‌های اخیر</h2>
+                <div id="recent" class="muted">هنوز چیزی ارسال نشده</div>
+            </div>
+        </section>
+
         <!-- Remote control -->
         <section id="page-remote" class="page hidden">
             <div id="remote-state" class="muted center">برای کنترل، اول تلویزیون را انتخاب کنید.</div>
@@ -143,6 +163,7 @@
 
     <nav>
         <button data-go="tv" class="on">📺<span>تلویزیون</span></button>
+        <button data-go="link">🔗<span>پخش لینک</span></button>
         <button data-go="install">⬇<span>نصب</span></button>
         <button data-go="remote">🎮<span>کنترل</span></button>
         <button data-go="help">❓<span>راهنما</span></button>

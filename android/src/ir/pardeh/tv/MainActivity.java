@@ -38,6 +38,8 @@ public class MainActivity extends Activity {
     private final ExecutorService work = Executors.newCachedThreadPool();
     private SigninServer signin;
     private Dialog signinDialog;
+    private volatile String shared;   // a link shared to the app, until the page takes it
+    private volatile boolean pageReady;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -50,7 +52,23 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "Native");
         web.setWebViewClient(new WebViewClient());
         setContentView(web);
+        takeShare(getIntent());
         web.loadUrl("file:///android_asset/ui/index.html");
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        takeShare(intent);
+        if (pageReady && shared != null) web.evaluateJavascript("window.onShared && window.onShared()", null);
+    }
+
+    /** The link in a "Share → Pardeh TV" (the first http(s) address in the shared text). */
+    private void takeShare(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
+        String text = intent.getStringExtra(Intent.EXTRA_TEXT);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("https?://\\S+").matcher(text == null ? "" : text);
+        if (m.find()) shared = m.group();
     }
 
     @Override
@@ -233,6 +251,21 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface public String modules() { return new JSONArray(Arrays.asList(Installer.MODULES)).toString(); }
+
+        /** The link shared to the app, once (null if none). */
+        @JavascriptInterface public String takeShared() {
+            pageReady = true;
+            String s = shared;
+            shared = null;
+            return s;
+        }
+
+        @JavascriptInterface public String clipboard() {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null || !cm.hasPrimaryClip() || cm.getPrimaryClip().getItemCount() == 0) return "";
+            CharSequence t = cm.getPrimaryClip().getItemAt(0).coerceToText(MainActivity.this);
+            return t == null ? "" : t.toString();
+        }
     }
 
     @Override

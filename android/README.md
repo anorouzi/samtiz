@@ -11,6 +11,10 @@ computer is needed.
 - **Installs Pardeh** with the parts you choose: Aparat, Gapfilm, live TV (Telewebion), links,
   sending from the phone, USB. The first time on each TV it asks you to sign in with a Samsung
   account (free), which makes the certificate the TV requires.
+- **Play a link on the TV:** paste a link (Aparat, a Gapfilm page, a direct mp4/m3u8) and press play.
+  Or use **Share → Pardeh TV** in any app (Aparat, the browser, Telegram…). Pardeh opens on the TV
+  and plays it. It goes through the TV's own launcher (`ed.apps.launch` with the link), so it
+  doesn't need the hub.
 - **Remote control:** arrows, OK, Back, Home, volume, channels, numbers, colour keys, playback.
   It uses the TV's own remote API, so the TV asks "Allow?" once. It can also open Pardeh on the TV.
 

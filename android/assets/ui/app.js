@@ -52,6 +52,7 @@ function go(page) {
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.go === page));
     if (page === 'install') showInstall();
     if (page === 'remote') remoteConnect();
+    if (page === 'link') renderRecent();
     window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
@@ -190,42 +191,123 @@ $('install').addEventListener('click', async () => {
     if (m) document.querySelectorAll('#modules input').forEach((c) => { c.checked = m.indexOf(c.value) !== -1; });
 }());
 
-// ---------- remote control (the TV's own remote API, WebSocket on port 8001) ----------
-let ws = null, wsReady = false, queued = [];
+// ---------- the TV's own remote API (WebSocket on port 8001): remote keys and opening Pardeh ----------
+// The first time, the TV asks "Allow?" on screen; after that it remembers this phone.
+let ws = null, wsReady = null;
 
 function remoteState(text, cls) {
     $('remote-state').innerHTML = `<span class="${cls || ''}">${text}</span>`;
 }
 
-function remoteConnect() {
-    if (!tv) return remoteState('برای کنترل، اول تلویزیون را انتخاب کنید.', 'warn');
-    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
-    remoteState('در حال اتصال به تلویزیون... (بار اول روی تلویزیون «Allow» را بزنید)', 'muted');
-    ws = new WebSocket(`ws://${tv.ip}:8001/api/v2/channels/samsung.remote.control?name=${btoa('Pardeh Phone')}`);
-    ws.onmessage = (m) => {
-        let d = {};
-        try { d = JSON.parse(m.data); } catch (e) { return; }
-        if (d.event === 'ms.channel.connect') {
-            wsReady = true;
-            remoteState('✓ وصل به ' + esc(tv.name || tv.ip), 'ok');
-            queued.splice(0).forEach(send);
-        } else if (d.event === 'ms.channel.unauthorized') {
-            remoteState('تلویزیون اجازه نداد — در تلویزیون: تنظیمات ← عمومی ← External Device Manager ← Device Connection Manager، این گوشی را Allow کنید.', 'bad');
-        }
-    };
-    ws.onclose = () => { wsReady = false; ws = null; };
-    ws.onerror = () => remoteState('اتصال برقرار نشد — تلویزیون روشن است و به همین وای‌فای وصل است؟', 'bad');
+// Resolves with the open socket once the TV has accepted this phone.
+function tvSocket() {
+    if (!tv) return Promise.reject(new Error('اول در صفحهٔ «تلویزیون» تلویزیون را انتخاب کنید'));
+    if (wsReady) return wsReady;
+    wsReady = new Promise((ok, fail) => {
+        remoteState('در حال اتصال به تلویزیون... (بار اول روی تلویزیون «Allow» را بزنید)', 'muted');
+        const sock = new WebSocket(`ws://${tv.ip}:8001/api/v2/channels/samsung.remote.control?name=${btoa('Pardeh Phone')}`);
+        const timer = setTimeout(() => { sock.close(); fail(new Error('تلویزیون جواب نداد — روی تلویزیون «Allow» را بزنید و دوباره امتحان کنید')); }, 30000);
+        sock.onmessage = (m) => {
+            let d = {};
+            try { d = JSON.parse(m.data); } catch (e) { return; }
+            if (d.event === 'ms.channel.connect') {
+                clearTimeout(timer);
+                ws = sock;
+                remoteState('✓ وصل به ' + esc(tv.name || tv.ip), 'ok');
+                ok(sock);
+            } else if (d.event === 'ms.channel.unauthorized') {
+                clearTimeout(timer);
+                fail(new Error('تلویزیون اجازه نداد — در تلویزیون: تنظیمات ← عمومی ← External Device Manager ← Device Connection Manager، این گوشی را Allow کنید'));
+            } else if (d.event === 'ed.apps.launch' && tvSocket.onLaunch) {
+                tvSocket.onLaunch(d.data);
+            }
+        };
+        sock.onclose = () => { clearTimeout(timer); ws = null; wsReady = null; fail(new Error('اتصال برقرار نشد — تلویزیون روشن است و به همین وای‌فای وصل است؟')); };
+    });
+    wsReady.catch((e) => { wsReady = null; remoteState(esc(e.message), 'bad'); });
+    return wsReady;
 }
 
-function send(key) {
-    ws.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: 'Click', DataOfCmd: key, Option: 'false', TypeOfRemote: 'SendRemoteKey' } }));
+function remoteConnect() {
+    if (!tv) return remoteState('برای کنترل، اول تلویزیون را انتخاب کنید.', 'warn');
+    tvSocket().catch(() => {});
+}
+
+function sendKey(key) {
+    tvSocket().then((sock) => sock.send(JSON.stringify({
+        method: 'ms.remote.control', params: { Cmd: 'Click', DataOfCmd: key, Option: 'false', TypeOfRemote: 'SendRemoteKey' }
+    }))).catch((e) => toast(e.message));
 }
 
 document.querySelectorAll('.key').forEach((b) => b.addEventListener('click', () => {
     if (navigator.vibrate) navigator.vibrate(12);
-    const key = b.dataset.key;
-    if (wsReady) send(key); else { queued.push(key); remoteConnect(); }
+    sendKey(b.dataset.key);
 }));
+
+// Opens Pardeh on the TV with the link; Pardeh plays it (already open or not).
+// The TV answers "ed.apps.launch" with 200, or 404 when Pardeh isn't installed.
+function playOnTv(url) {
+    return tvSocket().then((sock) => new Promise((ok, fail) => {
+        const timer = setTimeout(() => { tvSocket.onLaunch = null; ok(); }, 6000);   // some TVs don't answer
+        tvSocket.onLaunch = (code) => {
+            clearTimeout(timer);
+            tvSocket.onLaunch = null;
+            if (code === 404 || code === '404') fail(new Error('پرده روی این تلویزیون نصب نیست — از صفحهٔ «نصب» نصبش کنید'));
+            else ok();
+        };
+        sock.send(JSON.stringify({
+            method: 'ms.channel.emit',
+            params: { event: 'ed.apps.launch', to: 'host', data: { appId: 'TvPlayr001.TVPlayer', action_type: 'DEEP_LINK', metaTag: url } }
+        }));
+    }));
+}
+
+// ---------- link page ----------
+function linkIn(text) {
+    const m = String(text || '').match(/https?:\/\/\S+/);
+    return m ? m[0] : null;
+}
+
+function renderRecent() {
+    const recent = store.get('recent', []);
+    $('recent').innerHTML = recent.length ? recent.map((u, i) => `<div class="recent">${esc(u)}<button class="second" data-i="${i}">▶ دوباره پخش</button></div>`).join('')
+        : 'هنوز چیزی ارسال نشده';
+    $('recent').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => sendLink(recent[+b.dataset.i])));
+}
+
+async function sendLink(url) {
+    url = linkIn(url) || (url && url.trim());
+    if (!url) return toast('لینکی وارد نشده');
+    if (!/^https?:\/\//.test(url)) url = 'https://' + url;
+    $('send').disabled = true;
+    $('send-state').innerHTML = 'در حال فرستادن به تلویزیون...';
+    try {
+        await playOnTv(url);
+        $('send-state').innerHTML = '<span class="ok">✓ روی تلویزیون باز شد</span>';
+        store.set('recent', [url].concat(store.get('recent', []).filter((u) => u !== url)).slice(0, 10));
+        renderRecent();
+    } catch (e) {
+        $('send-state').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+    }
+    $('send').disabled = false;
+}
+
+$('send').addEventListener('click', () => sendLink($('url').value));
+$('paste').addEventListener('click', () => {
+    const text = Native.clipboard();
+    $('url').value = linkIn(text) || text;
+    if (!$('url').value) toast('کلیپ‌بورد خالی است — اول لینک را کپی کنید');
+});
+
+// "Share → Pardeh TV" from another app: send it straight away.
+window.onShared = () => {
+    const url = Native.takeShared();
+    if (!url) return;
+    go('link');
+    $('url').value = url;
+    sendLink(url);
+};
+renderRecent();
 
 $('open-pardeh').addEventListener('click', async () => {
     if (!tv) return toast('اول تلویزیون را انتخاب کنید');
@@ -235,4 +317,4 @@ $('open-pardeh').addEventListener('click', async () => {
 
 // ---------- start ----------
 $('version').textContent = 'نسخهٔ ' + Native.version();
-checkTv();
+checkTv().then(() => window.onShared());
