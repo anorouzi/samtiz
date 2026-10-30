@@ -25,29 +25,29 @@
                 <h2>آمادگی برای نصب</h2>
                 <div id="readiness" class="muted">اول تلویزیون را انتخاب کنید.</div>
             </div>
-            <!-- Setup from the phone: the app presses the buttons and types the IP on the TV -->
+            <!-- Setup from the phone: the app presses the buttons, types this phone's IP and restarts the TV -->
             <div class="card hidden" id="setup">
-                <h2>تنظیم از روی گوشی</h2>
+                <h2>تنظیم خودکار از روی گوشی</h2>
                 <ol class="steps">
-                    <li>با ریموت تلویزیون (یا دکمه‌های پایین) صفحهٔ <b>Apps</b> (برنامه‌ها) را باز کنید.</li>
-                    <li><button id="type12345" class="second">زدن <bdi dir="ltr" class="nowrap">1 2 3 4 5</bdi> روی تلویزیون</button></li>
-                    <li>در پنجرهٔ Developer mode، گزینهٔ <b>On</b> را انتخاب کنید و روی کادر <b>Host PC IP</b> بروید و OK بزنید. <b>IP گوشی خودکار نوشته می‌شود.</b></li>
-                    <li>روی <b>OK</b> پنجره بروید و OK بزنید.</li>
-                    <li><button id="restart-tv" class="second">خاموش و روشن کردن کامل تلویزیون</button></li>
+                    <li>صفحهٔ <b>Apps</b> (برنامه‌ها) را روی تلویزیون باز کنید: دکمهٔ <b>⌂ خانه</b> پایین را بزنید، با ◀ ▶ روی <b>Apps</b> بروید و <b>OK</b> بزنید.
+                        <div class="row3">
+                            <button class="key" data-key="KEY_HOME">⌂ خانه</button>
+                            <button class="key" data-key="KEY_RETURN">↩ برگشت</button>
+                            <button class="key" data-key="KEY_EXIT">خروج</button>
+                        </div>
+                        <div class="pad mini">
+                            <button class="key up" data-key="KEY_UP">▲</button>
+                            <button class="key left" data-key="KEY_LEFT">◀</button>
+                            <button class="key ok" data-key="KEY_ENTER">OK</button>
+                            <button class="key right" data-key="KEY_RIGHT">▶</button>
+                            <button class="key down" data-key="KEY_DOWN">▼</button>
+                        </div>
+                    </li>
+                    <li>وقتی صفحهٔ Apps باز شد، این دکمه را بزنید. بقیه را برنامه خودش انجام می‌دهد (کد ۱۲۳۴۵، نوشتن IP گوشی، OK و خاموش و روشن کردن تلویزیون).
+                        <button id="auto-setup">⚙ تنظیم خودکار تلویزیون</button></li>
                 </ol>
-                <div class="pad mini">
-                    <button class="key up" data-key="KEY_UP">▲</button>
-                    <button class="key left" data-key="KEY_LEFT">◀</button>
-                    <button class="key ok" data-key="KEY_ENTER">OK</button>
-                    <button class="key right" data-key="KEY_RIGHT">▶</button>
-                    <button class="key down" data-key="KEY_DOWN">▼</button>
-                </div>
-                <div class="row3">
-                    <button class="key" data-key="KEY_HOME">⌂ خانه</button>
-                    <button class="key" data-key="KEY_RETURN">↩ برگشت</button>
-                    <button class="key" data-key="KEY_EXIT">خروج</button>
-                </div>
                 <div id="setup-state" class="muted center"></div>
+                <button id="setup-continue" class="hidden">ادامه</button>
             </div>
             <div class="card">
                 <h2>IP این گوشی</h2>
@@ -75,7 +75,7 @@
                     <label><input type="checkbox" value="aparat" checked> آپارات</label>
                     <label><input type="checkbox" value="gapfilm" checked> گپ فیلم (ژانرها، بازیگران، ورود با موبایل)</label>
                     <label><input type="checkbox" value="live" checked> پخش زنده — تلوبیون (به هاب نیاز دارد)</label>
-                    <label><input type="checkbox" value="link" checked> باز کردن لینک</label>
+                    <label><input type="checkbox" value="link" checked> باز کردن لینک (و «پخش لینک» از همین برنامه)</label>
                     <label><input type="checkbox" value="phone" checked> ارسال لینک از گوشی (به هاب نیاز دارد)</label>
                     <label><input type="checkbox" value="usb" checked> فایل‌های USB و ذخیره روی USB</label>
                 </div>
@@ -160,6 +160,7 @@
         <section id="page-help" class="page hidden">
             <div class="card">
                 <h2>آماده کردن تلویزیون (فقط یک بار)</h2>
+                <div class="muted">راه ساده: در صفحهٔ «تلویزیون» دکمهٔ <b>تنظیم خودکار</b> همهٔ این کارها را خودش انجام می‌دهد. اگر کار نکرد، با ریموت:</div>
                 <ol class="steps">
                     <li>گوشی و تلویزیون باید به <b>یک وای‌فای</b> وصل باشند. <button class="link" id="wifi">تنظیمات وای‌فای گوشی</button></li>
                     <li>با ریموت تلویزیون، دکمهٔ خانه را بزنید و بخش <b>Apps</b> (برنامه‌ها) را باز کنید.</li>

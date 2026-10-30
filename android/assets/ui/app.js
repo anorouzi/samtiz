@@ -221,8 +221,6 @@ function tvSocket() {
                 fail(new Error('تلویزیون اجازه نداد — در تلویزیون: تنظیمات ← عمومی ← External Device Manager ← Device Connection Manager، این گوشی را Allow کنید'));
             } else if (d.event === 'ed.apps.launch' && tvSocket.onLaunch) {
                 tvSocket.onLaunch(d.data);
-            } else if (d.event === 'ms.remote.imeStart') {
-                onTvKeyboard(sock);
             }
         };
         sock.onclose = () => { clearTimeout(timer); ws = null; wsReady = null; fail(new Error('اتصال برقرار نشد — تلویزیون روشن است و به همین وای‌فای وصل است؟')); };
@@ -247,82 +245,128 @@ document.querySelectorAll('.key').forEach((b) => b.addEventListener('click', () 
     sendKey(b.dataset.key);
 }));
 
-// Opens Pardeh on the TV with the link; Pardeh plays it (already open or not).
-// The TV answers "ed.apps.launch" with 200, or 404 when Pardeh isn't installed.
-function playOnTv(url) {
+// Starts Pardeh on the TV (the TV answers ed.apps.launch with true, or false/404 if it isn't installed).
+function launchPardeh() {
     return tvSocket().then((sock) => new Promise((ok, fail) => {
         const timer = setTimeout(() => { tvSocket.onLaunch = null; ok(); }, 6000);   // some TVs don't answer
-        tvSocket.onLaunch = (code) => {
+        tvSocket.onLaunch = (answer) => {
             clearTimeout(timer);
             tvSocket.onLaunch = null;
-            if (code === 404 || code === '404') fail(new Error('پرده روی این تلویزیون نصب نیست — از صفحهٔ «نصب» نصبش کنید'));
+            if (answer === false || answer === 404 || answer === '404') fail(new Error('پرده روی این تلویزیون نصب نیست — از صفحهٔ «نصب» نصبش کنید'));
             else ok();
         };
-        sock.send(JSON.stringify({
-            method: 'ms.channel.emit',
-            params: { event: 'ed.apps.launch', to: 'host', data: { appId: 'TvPlayr001.TVPlayer', action_type: 'DEEP_LINK', metaTag: url } }
-        }));
+        sock.send(JSON.stringify({ method: 'ms.channel.emit', params: { event: 'ed.apps.launch', to: 'host', data: { appId: 'TvPlayr001.TVPlayer', action_type: 'NATIVE_LAUNCH' } } }));
     }));
 }
 
-// ---------- setting up Developer Mode from the phone ----------
-// The app presses 1 2 3 4 5 for you, types this phone's IP when the TV's keyboard opens on the
-// Host PC IP field, watches the TV until it reports the new IP, and can restart the TV.
-function setupState(html) { $('setup-state').innerHTML = html; }
-
-function onTvKeyboard(sock) {
-    if ($('setup').classList.contains('hidden')) return;   // only while setting up
-    const ip = myIps()[0];
-    sock.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: btoa(ip), DataOfCmd: 'base64', TypeOfRemote: 'SendInputString' } }));
-    setTimeout(() => sock.send(JSON.stringify({ method: 'ms.remote.control', params: { TypeOfRemote: 'SendInputEnd' } })), 600);
-    setupState(`<span class="ok">IP گوشی (<span class="ip">${esc(ip)}</span>) در تلویزیون نوشته شد ✓ — حالا روی OK پنجره بروید و OK بزنید.</span>`);
-    watchTv();
+// Sends a link to Pardeh through its app channel on the TV (ir.pardeh.links, port 8001); this TV
+// doesn't pass links through its launcher. If Pardeh isn't open, it's started first and gets the
+// link as soon as it joins the channel.
+function playOnTv(url) {
+    return new Promise((ok, fail) => {
+        const PARDEH = btoa('Pardeh TV');
+        const ch = new WebSocket(`ws://${tv.ip}:8001/api/v2/channels/ir.pardeh.links?name=${btoa('Pardeh Phone')}`);
+        let finished = false;
+        const finish = (err) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            setTimeout(() => ch.close(), 600);
+            if (err) fail(err); else ok();
+        };
+        const timer = setTimeout(() => finish(new Error('پرده روی تلویزیون باز نشد — اگر نصب نیست، از صفحهٔ «نصب» نصبش کنید')), 30000);
+        const send = (id) => {
+            ch.send(JSON.stringify({ method: 'ms.channel.emit', params: { event: 'play', to: id, data: url } }));
+            finish();
+        };
+        ch.onmessage = (m) => {
+            let d = {};
+            try { d = JSON.parse(m.data); } catch (e) { return; }
+            if (d.event === 'ms.channel.connect') {
+                const pardeh = ((d.data && d.data.clients) || []).find((c) => c.attributes && c.attributes.name === PARDEH);
+                if (pardeh) return send(pardeh.id);
+                $('send-state').innerHTML = 'پرده روی تلویزیون باز می‌شود...';
+                launchPardeh().catch(finish);
+            } else if (d.event === 'ms.channel.clientConnect' && d.data && d.data.attributes && d.data.attributes.name === PARDEH) {
+                setTimeout(() => send(d.data.id), 300);
+            }
+        };
+        ch.onerror = () => finish(new Error('اتصال به تلویزیون برقرار نشد — تلویزیون روشن است و به همین وای‌فای وصل است؟'));
+    });
 }
+
+// ---------- setting up Developer Mode from the phone ----------
+// What works on a 2016 TV (found by trying on one): with the Apps screen open (opened from the
+// Home bar), 1 2 3 4 5 opens the Developer mode window. Down goes to the first Host PC IP box;
+// the boxes take number keys, Left moves to the next box and Right back (passing back through a
+// box empties it, so the boxes are filled in one pass from the first). Down from the last box is
+// OK. The new IP only takes effect after a full restart (a long press on power).
+function setupState(html) { $('setup-state').innerHTML = html; }
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
-$('type12345').addEventListener('click', async () => {
-    try {
-        await tvSocket();
-        for (const n of [1, 2, 3, 4, 5]) { sendKey('KEY_' + n); await pause(450); }
-        setupState('<span class="ok">۱ ۲ ۳ ۴ ۵ زده شد ✓</span> — اگر پنجرهٔ Developer mode باز نشد، اول صفحهٔ Apps را باز کنید و دوباره بزنید.');
-        watchTv();
-    } catch (e) { setupState(`<span class="bad">${esc(e.message)}</span>`); }
-});
-
-// Polls the TV's own info until its Developer Mode IP is this phone.
-function watchTv() {
-    clearInterval(watchTv.t);
-    let n = 0;
-    watchTv.t = setInterval(async () => {
-        if (++n > 60) return clearInterval(watchTv.t);   // two minutes
-        const now = await call('tvInfo', tv.ip).catch(() => null);
-        if (now && now.developerMode && myIps().indexOf(now.developerIP) !== -1) {
-            clearInterval(watchTv.t);
-            pick(now);
-            setupState('<span class="ok">IP در تلویزیون ذخیره شد ✓</span> — برای فعال شدن، تلویزیون را کامل خاموش و روشن کنید (دکمهٔ پایین).');
-        }
-    }, 2000);
+async function press(keys, gap) {
+    for (const k of keys) { sendKey(k); await pause(gap || 500); }
 }
 
-// A long press on power restarts the TV; then wait until it answers again.
-$('restart-tv').addEventListener('click', async () => {
+async function restartTv(sock) {
+    const power = (cmd) => sock.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: cmd, DataOfCmd: 'KEY_POWER', Option: 'false', TypeOfRemote: 'SendRemoteKey' } }));
+    power('Press');
+    await pause(5500);
+    power('Release');
+}
+
+// Waits until the TV answers again with this phone as its Developer Mode IP.
+async function waitForNewIp(minutes) {
+    const until = Date.now() + minutes * 60000;
+    while (Date.now() < until) {
+        await pause(3000);
+        const now = await call('tvInfo', tv.ip).catch(() => null);
+        if (now && now.developerMode && myIps().indexOf(now.developerIP) !== -1) { pick(now); return true; }
+    }
+    return false;
+}
+
+let setupContinue = null;
+
+$('auto-setup').addEventListener('click', async () => {
+    const ip = myIps()[0];
+    const parts = (ip || '').split('.');
+    if (parts.length !== 4) return setupState('<span class="bad">IP گوشی پیدا نشد — به وای‌فای وصل است؟</span>');
+    $('auto-setup').disabled = true;
     try {
         const sock = await tvSocket();
-        const power = (cmd) => sock.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: cmd, DataOfCmd: 'KEY_POWER', Option: 'false', TypeOfRemote: 'SendRemoteKey' } }));
-        setupState('در حال خاموش و روشن کردن تلویزیون (حدود یک دقیقه)...');
-        power('Press');
-        await pause(5500);
-        power('Release');
-        await pause(15000);
-        for (let i = 0; i < 30; i++) {
-            const now = await call('tvInfo', tv.ip).catch(() => null);
-            if (now) { pick(now); setupState(ready(now) ? '<span class="ok">تلویزیون آماده است ✓</span>' : 'تلویزیون روشن شد.'); return; }
-            await pause(3000);
+        setupState('زدن ۱ ۲ ۳ ۴ ۵ ...');
+        await press(['KEY_1', 'KEY_2', 'KEY_3', 'KEY_4', 'KEY_5']);
+        await pause(2500);
+        if (!tv.developerMode) {
+            // A TV that never had Developer mode on: switching it on is left to you, once.
+            setupState('در پنجرهٔ Developer mode گزینهٔ <b>On</b> را انتخاب کنید (با دکمه‌های پایین)، بعد «ادامه» را بزنید.');
+            $('setup-continue').classList.remove('hidden');
+            await new Promise((r) => { setupContinue = r; });
+            $('setup-continue').classList.add('hidden');
         }
-        setupState('<span class="warn">تلویزیون هنوز جواب نمی‌دهد — اگر خاموش ماند، با ریموت روشنش کنید.</span>');
-    } catch (e) { setupState(`<span class="bad">${esc(e.message)}</span>`); }
+        setupState(`نوشتن IP گوشی (<span class="ip">${esc(ip)}</span>) ...`);
+        await press(['KEY_DOWN', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT', 'KEY_RIGHT']);
+        for (let i = 0; i < 4; i++) {
+            if (i) await press(['KEY_LEFT']);
+            await press(parts[i].split('').map((d) => 'KEY_' + d));
+        }
+        setupState('ذخیره (OK) ...');
+        await press(['KEY_DOWN', 'KEY_ENTER'], 900);
+        await pause(1500);
+        setupState('خاموش و روشن کردن کامل تلویزیون (حدود یک دقیقه)...');
+        await restartTv(sock);
+        if (await waitForNewIp(3)) setupState('<span class="ok">تمام شد ✓ تلویزیون حالا با این گوشی کار می‌کند.</span><button data-go="install">رفتن به نصب</button>');
+        else setupState('<span class="warn">IP تازه هنوز فعال نشده.</span> اگر تلویزیون خاموش ماند با ریموت روشنش کنید؛ اگر روشن است، کار را دوباره امتحان کنید (اول صفحهٔ Apps را از Home باز کنید).');
+        $('setup-state').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+    } catch (e) {
+        setupState(`<span class="bad">${esc(e.message)}</span>`);
+    }
+    $('auto-setup').disabled = false;
 });
+
+$('setup-continue').addEventListener('click', () => { if (setupContinue) { setupContinue(); setupContinue = null; } });
 
 // ---------- link page ----------
 function linkIn(text) {
@@ -372,9 +416,8 @@ window.onShared = () => {
 renderRecent();
 
 $('open-pardeh').addEventListener('click', async () => {
-    if (!tv) return toast('اول تلویزیون را انتخاب کنید');
-    try { await call('launch', tv.ip); toast('پرده روی تلویزیون باز شد'); }
-    catch (e) { toast('باز کردن ممکن نشد — تلویزیون باید آماده باشد (صفحهٔ «تلویزیون»)'); }
+    try { await launchPardeh(); toast('پرده روی تلویزیون باز شد'); }
+    catch (e) { toast(e.message); }
 });
 
 // ---------- start ----------

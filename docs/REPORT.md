@@ -69,8 +69,18 @@ The installed-app list can be read over the TV's WebSocket API (`ed.installedApp
 4. Check with `curl http://<tv-ip>:8001/api/v2/`, which should show `"developerMode": "1"` and the
    host IP, and port 26101 should be open.
 
-Number keys sent over the WebSocket remote API didn't open the dialog reliably. Typing the IP
-worked with `TypeOfRemote: "SendInputString"` (base64 text) on the same channel.
+**From the remote API (what the Android app does).** Number keys sent over the WebSocket remote
+API open the dialog only on the Apps screen opened from the Home bar (not on the screen reached in
+other ways, where even the real remote's 1 2 3 4 5 does nothing). In the dialog:
+
+- `KEY_DOWN` goes to the first Host PC IP box, then `KEY_RIGHT` ×4 makes sure it's the first one.
+- The boxes take number keys. **`KEY_LEFT` moves to the next box** and `KEY_RIGHT` back; going back
+  through a box empties it, so fill all four in one pass from the first.
+- `KEY_DOWN` from the last box selects OK, then `KEY_ENTER`.
+- Hold `KEY_POWER` (Press, 5.5 s, Release) for the full restart.
+
+The TV never sends `ms.remote.imeStart` and its IP boxes ignore `SendInputString`, so keys are the
+only way. `tools/tv-keys.mjs` sends such sequences from a computer.
 
 ### 4.2 Tizen Studio on Apple Silicon
 
@@ -299,8 +309,14 @@ which suits the case where the TV uses the phone's hotspot.
    under *External Device Manager → Device Connection Manager*. During development the hub's
    `/api/key` (keys injected inside the app) was more reliable.
 9. **Emoji** may not render in the TV's fonts, so the UI uses plain symbols (▶ ● ■ ↓ ✓ ×).
-10. **No launch-with-URL from outside.** `POST /api/v2/applications/<id>` on port 8001 didn't
-    respond, and launching through `ed.apps.launch` needs the WebSocket authorisation.
+10. **No launch-with-URL from outside, but app channels work.** `POST /api/v2/applications/<id>`
+    on port 8001 didn't respond. `ed.apps.launch` with `DEEP_LINK` starts Pardeh but **drops the
+    link** (`metaTag`), so the app sees no data. What works is an MSF app channel: Pardeh joins
+    `ws://127.0.0.1:8001/api/v2/channels/ir.pardeh.links` as "Pardeh TV", and a phone or computer on
+    the same channel sends it a `play` event with the link. No authorisation is needed for app
+    channels. If Pardeh isn't open, it's started with `ed.apps.launch` (`NATIVE_LAUNCH`) and gets the
+    link when it joins (the sender waits for `ms.channel.clientConnect`). Tested from the Mac
+    (`tools/tv-link.mjs`) and with the Android app's code: it plays within 2–4 s, open or not.
 
 ## 8. Test results (on the TV)
 
@@ -399,7 +415,8 @@ through the hub they'd also need it to pass POST bodies and `x-…` headers, and
 ```
 app/          Pardeh Tizen web app (config.xml, index.html, css/, js/, icon.png)
 hub/          Optional TV Hub (Node) + phone page + /install page (installer.mjs, sdb.mjs, signing.mjs, samsung-ca/)
-tools/        deploy.sh, tv-remote.mjs, remove-store-apps.sh, make-icon.py, get-yt-dlp.sh, export-chat.py
+tools/        deploy.sh, tv-remote.mjs, tv-keys.mjs, tv-link.mjs, fake-tv.mjs, build-android.sh,
+              remove-store-apps.sh, make-icon.py, get-yt-dlp.sh, export-chat.py
 certificates/ How to create the Samsung certificate (files themselves are git-ignored)
 docs/         This report + chat-session.md (the whole Claude Code session, secrets redacted)
 ```

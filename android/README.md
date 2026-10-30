@@ -8,18 +8,24 @@ computer is needed.
   this phone, and explains what to change if not.
 - **Help in Persian**, step by step: Apps → `1 2 3 4 5` → Developer mode **On** → Host PC IP = the
   phone's address (shown in big digits) → full restart.
-- **Setup from the phone:** a button presses `1 2 3 4 5` on the TV, which helps because the Smart
-  Remote has no number keys. When the TV's keyboard opens on the Host PC IP field, the app types the
-  phone's IP itself (the remote API reports `ms.remote.imeStart`, and the app answers with
-  `SendInputString`). It then watches the TV's info until `developerIP` is the phone, and can
-  restart the TV (a long press on power). Arrows and OK are on the same card.
+- **Setup from the phone, one button:** you open the TV's Apps screen from Home (with the
+  card's own Home, arrows and OK) and press «تنظیم خودکار». The app presses `1 2 3 4 5`, moves to
+  the first Host PC IP box, types the phone's IP with number keys (Left moves to the next box on
+  this TV, and the boxes are filled in one pass from the first, since going back through a box
+  empties it), selects OK, and holds power for 5.5 s for a full restart. It then waits until the
+  TV reports this phone as its `developerIP`. If Developer Mode was off, it stops once and asks you
+  to pick **On** before it goes on. The TV never sends `ms.remote.imeStart` and its IP boxes ignore
+  `SendInputString`, so keys are the only way.
 - **Installs Pardeh** with the parts you choose: Aparat, Gapfilm, live TV (Telewebion), links,
   sending from the phone, USB. The first time on each TV it asks you to sign in with a Samsung
   account (free), which makes the certificate the TV requires.
 - **Play a link on the TV:** paste a link (Aparat, a Gapfilm page, a direct mp4/m3u8) and press play.
   Or use **Share → Pardeh TV** in any app (Aparat, the browser, Telegram…). Pardeh opens on the TV
-  and plays it. It goes through the TV's own launcher (`ed.apps.launch` with the link), so it
-  doesn't need the hub.
+  and plays it. The link goes through Pardeh's own app channel on the TV
+  (`ws://<tv>:8001/api/v2/channels/ir.pardeh.links`): Pardeh joins it as "Pardeh TV" and the phone
+  sends it a `play` event. If Pardeh isn't open, the app starts it (`ed.apps.launch`) and sends the
+  link as soon as Pardeh joins. No hub is needed. (The TV's launcher drops the link it's given for
+  apps like Pardeh, so `DEEP_LINK` can't be used.)
 - **Remote control:** arrows, OK, Back, Home, volume, channels, numbers, colour keys, playback.
   It uses the TV's own remote API, so the TV asks "Allow?" once. It can also open Pardeh on the TV.
 

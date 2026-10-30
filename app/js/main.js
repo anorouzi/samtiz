@@ -112,8 +112,14 @@
     function getJSON(url, ok, fail) { ajax(url, {}, ok, fail); }
 
     // Sends diagnostics to the TV Hub (written to ~/TVHub/tv.log).
+    // Events from before the hub is found (e.g. at startup) wait here and are sent once it is.
+    var earlyLogs = [];
+
     function hubLog(event, data) {
-        if (!HUB) { return; }
+        if (!HUB) {
+            if (earlyLogs.length < 30) { earlyLogs.push([event, data]); }
+            return;
+        }
         try {
             var xhr = new XMLHttpRequest();
             xhr.open('POST', HUB + '/api/log', true);
@@ -1422,7 +1428,8 @@
         if (!has('link') && !has('phone')) { return; }
         try {
             var req = tizen.application.getCurrentApplication().getRequestedAppControl();
-            if (!req) { return; }
+            if (!req) { return hubLog('appcontrol', 'none'); }
+            hubLog('appcontrol', { op: req.appControl.operation, data: (req.appControl.data || []).map(function (d) { return d.key + '=' + d.value.join('|'); }) });
             var found = null;
             (req.appControl.data || []).forEach(function (d) {
                 d.value.forEach(function (v) {
@@ -1432,6 +1439,29 @@
             });
             if (found) { toast('لینک دریافت شد'); openLink(found); }
         } catch (e) { /* not on a TV */ }
+    }
+
+    // ---------- links from the phone app, with no hub ----------
+    // Pardeh joins an app channel on the TV's own message server (port 8001, the same one the
+    // remote API uses). The Pardeh TV phone app joins it too and sends { event: 'play', data: url }.
+    // This TV doesn't pass links through its app launcher, so this is how they get here.
+    function joinLinkChannel() {
+        if (!window.WebSocket || (!has('link') && !has('phone'))) { return; }
+        var ws;
+        try { ws = new WebSocket('ws://127.0.0.1:8001/api/v2/channels/ir.pardeh.links?name=' + btoa('Pardeh TV')); } catch (e) { return; }
+        ws.onmessage = function (m) {
+            var d;
+            try { d = JSON.parse(m.data); } catch (e) { return; }
+            if (d.event !== 'play' || !d.data) { return; }
+            hubLog('link.channel', String(d.data));
+            if (screen === 'link') { closeLinkDialog(); }
+            if (screen === 'phone') { closePhoneDialog(); }
+            if (screen === 'login') { closeLogin(); }
+            if (menu) { closeMenu(false); }
+            toast('لینک از گوشی دریافت شد');
+            openLink(String(d.data));
+        };
+        ws.onclose = function () { setTimeout(joinLinkChannel, 5000); };
     }
 
     // ---------- TV Hub (optional) ----------
@@ -1449,6 +1479,7 @@
         };
         var found = function (base) {
             HUB = base;
+            earlyLogs.splice(0).forEach(function (l) { hubLog(l[0], l[1]); });
             store.set('hub', base);
             connectHub();
             var dlApi = false;
@@ -2147,7 +2178,8 @@
         });
 
         handleAppControl();
-        window.addEventListener('appcontrol', handleAppControl);
+        window.addEventListener('appcontrol', function () { hubLog('appcontrol.event', null); handleAppControl(); });
+        joinLinkChannel();
         findUsb(function () {
             if (has('usb')) { testUsbWrite(); }
             findHub();
