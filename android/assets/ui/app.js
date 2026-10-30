@@ -85,6 +85,7 @@ function renderTv() {
     else if (!ok) why = `<span class="warn">Developer mode روشن است ولی IP آن <span class="ip">${esc(tv.developerIP)}</span> است؛ باید <span class="ip">${esc(myIps()[0])}</span> باشد.</span> طبق راهنما IP را عوض کنید و تلویزیون را کامل خاموش و روشن کنید.`;
     else why = '<span class="ok">آماده ✓</span> — می‌توانید پرده را نصب کنید و تلویزیون را با گوشی کنترل کنید.';
     $('readiness').innerHTML = why + (ok ? '<button data-go="install">رفتن به نصب</button>' : '<button class="second" data-go="help">راهنمای قدم‌به‌قدم</button>');
+    $('setup').classList.toggle('hidden', ok || !!tv.offline);
     $('readiness').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
 }
 
@@ -220,6 +221,8 @@ function tvSocket() {
                 fail(new Error('تلویزیون اجازه نداد — در تلویزیون: تنظیمات ← عمومی ← External Device Manager ← Device Connection Manager، این گوشی را Allow کنید'));
             } else if (d.event === 'ed.apps.launch' && tvSocket.onLaunch) {
                 tvSocket.onLaunch(d.data);
+            } else if (d.event === 'ms.remote.imeStart') {
+                onTvKeyboard(sock);
             }
         };
         sock.onclose = () => { clearTimeout(timer); ws = null; wsReady = null; fail(new Error('اتصال برقرار نشد — تلویزیون روشن است و به همین وای‌فای وصل است؟')); };
@@ -261,6 +264,65 @@ function playOnTv(url) {
         }));
     }));
 }
+
+// ---------- setting up Developer Mode from the phone ----------
+// The app presses 1 2 3 4 5 for you, types this phone's IP when the TV's keyboard opens on the
+// Host PC IP field, watches the TV until it reports the new IP, and can restart the TV.
+function setupState(html) { $('setup-state').innerHTML = html; }
+
+function onTvKeyboard(sock) {
+    if ($('setup').classList.contains('hidden')) return;   // only while setting up
+    const ip = myIps()[0];
+    sock.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: btoa(ip), DataOfCmd: 'base64', TypeOfRemote: 'SendInputString' } }));
+    setTimeout(() => sock.send(JSON.stringify({ method: 'ms.remote.control', params: { TypeOfRemote: 'SendInputEnd' } })), 600);
+    setupState(`<span class="ok">IP گوشی (<span class="ip">${esc(ip)}</span>) در تلویزیون نوشته شد ✓ — حالا روی OK پنجره بروید و OK بزنید.</span>`);
+    watchTv();
+}
+
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+$('type12345').addEventListener('click', async () => {
+    try {
+        await tvSocket();
+        for (const n of [1, 2, 3, 4, 5]) { sendKey('KEY_' + n); await pause(450); }
+        setupState('<span class="ok">۱ ۲ ۳ ۴ ۵ زده شد ✓</span> — اگر پنجرهٔ Developer mode باز نشد، اول صفحهٔ Apps را باز کنید و دوباره بزنید.');
+        watchTv();
+    } catch (e) { setupState(`<span class="bad">${esc(e.message)}</span>`); }
+});
+
+// Polls the TV's own info until its Developer Mode IP is this phone.
+function watchTv() {
+    clearInterval(watchTv.t);
+    let n = 0;
+    watchTv.t = setInterval(async () => {
+        if (++n > 60) return clearInterval(watchTv.t);   // two minutes
+        const now = await call('tvInfo', tv.ip).catch(() => null);
+        if (now && now.developerMode && myIps().indexOf(now.developerIP) !== -1) {
+            clearInterval(watchTv.t);
+            pick(now);
+            setupState('<span class="ok">IP در تلویزیون ذخیره شد ✓</span> — برای فعال شدن، تلویزیون را کامل خاموش و روشن کنید (دکمهٔ پایین).');
+        }
+    }, 2000);
+}
+
+// A long press on power restarts the TV; then wait until it answers again.
+$('restart-tv').addEventListener('click', async () => {
+    try {
+        const sock = await tvSocket();
+        const power = (cmd) => sock.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: cmd, DataOfCmd: 'KEY_POWER', Option: 'false', TypeOfRemote: 'SendRemoteKey' } }));
+        setupState('در حال خاموش و روشن کردن تلویزیون (حدود یک دقیقه)...');
+        power('Press');
+        await pause(5500);
+        power('Release');
+        await pause(15000);
+        for (let i = 0; i < 30; i++) {
+            const now = await call('tvInfo', tv.ip).catch(() => null);
+            if (now) { pick(now); setupState(ready(now) ? '<span class="ok">تلویزیون آماده است ✓</span>' : 'تلویزیون روشن شد.'); return; }
+            await pause(3000);
+        }
+        setupState('<span class="warn">تلویزیون هنوز جواب نمی‌دهد — اگر خاموش ماند، با ریموت روشنش کنید.</span>');
+    } catch (e) { setupState(`<span class="bad">${esc(e.message)}</span>`); }
+});
 
 // ---------- link page ----------
 function linkIn(text) {

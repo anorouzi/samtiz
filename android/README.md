@@ -8,6 +8,11 @@ computer is needed.
   this phone, and explains what to change if not.
 - **Help in Persian**, step by step: Apps → `1 2 3 4 5` → Developer mode **On** → Host PC IP = the
   phone's address (shown in big digits) → full restart.
+- **Setup from the phone:** a button presses `1 2 3 4 5` on the TV, which helps because the Smart
+  Remote has no number keys. When the TV's keyboard opens on the Host PC IP field, the app types the
+  phone's IP itself (the remote API reports `ms.remote.imeStart`, and the app answers with
+  `SendInputString`). It then watches the TV's info until `developerIP` is the phone, and can
+  restart the TV (a long press on power). Arrows and OK are on the same card.
 - **Installs Pardeh** with the parts you choose: Aparat, Gapfilm, live TV (Telewebion), links,
   sending from the phone, USB. The first time on each TV it asks you to sign in with a Samsung
   account (free), which makes the certificate the TV requires.

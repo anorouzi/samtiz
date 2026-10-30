@@ -25,6 +25,30 @@
                 <h2>آمادگی برای نصب</h2>
                 <div id="readiness" class="muted">اول تلویزیون را انتخاب کنید.</div>
             </div>
+            <!-- Setup from the phone: the app presses the buttons and types the IP on the TV -->
+            <div class="card hidden" id="setup">
+                <h2>تنظیم از روی گوشی</h2>
+                <ol class="steps">
+                    <li>با ریموت تلویزیون (یا دکمه‌های پایین) صفحهٔ <b>Apps</b> (برنامه‌ها) را باز کنید.</li>
+                    <li><button id="type12345" class="second">زدن <bdi dir="ltr" class="nowrap">1 2 3 4 5</bdi> روی تلویزیون</button></li>
+                    <li>در پنجرهٔ Developer mode، گزینهٔ <b>On</b> را انتخاب کنید و روی کادر <b>Host PC IP</b> بروید و OK بزنید. <b>IP گوشی خودکار نوشته می‌شود.</b></li>
+                    <li>روی <b>OK</b> پنجره بروید و OK بزنید.</li>
+                    <li><button id="restart-tv" class="second">خاموش و روشن کردن کامل تلویزیون</button></li>
+                </ol>
+                <div class="pad mini">
+                    <button class="key up" data-key="KEY_UP">▲</button>
+                    <button class="key left" data-key="KEY_LEFT">◀</button>
+                    <button class="key ok" data-key="KEY_ENTER">OK</button>
+                    <button class="key right" data-key="KEY_RIGHT">▶</button>
+                    <button class="key down" data-key="KEY_DOWN">▼</button>
+                </div>
+                <div class="row3">
+                    <button class="key" data-key="KEY_HOME">⌂ خانه</button>
+                    <button class="key" data-key="KEY_RETURN">↩ برگشت</button>
+                    <button class="key" data-key="KEY_EXIT">خروج</button>
+                </div>
+                <div id="setup-state" class="muted center"></div>
+            </div>
             <div class="card">
                 <h2>IP این گوشی</h2>
                 <div class="muted">در تلویزیون، در قسمت <b>Host PC IP</b> همین عدد را بنویسید:</div>

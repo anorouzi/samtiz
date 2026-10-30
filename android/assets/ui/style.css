@@ -21,7 +21,7 @@ main { padding: 12px 14px; max-width: 640px; margin: 0 auto; }
 .ok { color: var(--ok); } .bad { color: var(--accent); } .warn { color: var(--warn); }
 
 button { font-family: inherit; }
-main > section button:not(.key):not(.link), #page-tv button { width: 100%; margin-top: 10px; padding: 14px; font-size: 16px; font-weight: bold; border: 0; border-radius: 12px; background: var(--accent); color: #fff; }
+main > section button:not(.key):not(.link) { width: 100%; margin-top: 10px; padding: 14px; font-size: 16px; font-weight: bold; border: 0; border-radius: 12px; background: var(--accent); color: #fff; }
 button.second { background: var(--line) !important; font-size: 15px !important; padding: 11px !important; }
 button:disabled { opacity: .45; }
 button.link { background: none; border: 0; color: var(--accent); padding: 0; font-size: 14px; text-decoration: underline; }
@@ -58,6 +58,9 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .digits { grid-template-columns: repeat(3, 1fr); direction: ltr; }
 .pad { direction: ltr; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 64px); gap: 8px; margin: 14px auto; width: 250px; }
 .pad .key { height: auto; font-size: 22px; }
+.pad.mini { grid-template-rows: repeat(3, 52px); width: 210px; }
+.card .key { background: var(--line); }
+.card .pad .ok { background: var(--accent); }
 .pad .up { grid-column: 2; grid-row: 1; } .pad .left { grid-column: 1; grid-row: 2; } .pad .ok { grid-column: 2; grid-row: 2; background: var(--accent); color: #fff; font-weight: bold; border-radius: 50%; }
 .pad .right { grid-column: 3; grid-row: 2; } .pad .down { grid-column: 2; grid-row: 3; }
 .red-k { color: var(--accent); font-size: 22px; }
